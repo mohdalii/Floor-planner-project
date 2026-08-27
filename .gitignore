@@ -1,0 +1,23 @@
+node_modules/
+.env
+*.log
+
+# local tooling config, not pushed
+.claude/
+
+# local mongo data if ever placed inside the repo
+.mongo-data/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# build output
+client/dist/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/

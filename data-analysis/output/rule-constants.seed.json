@@ -1,0 +1,300 @@
+{
+  "source": "ResPlan (Kaggle, CC BY-NC-SA 4.0), mined via data-analysis/seed_stats.py",
+  "plan_count": 17000,
+  "room_type_frequency": {
+    "bedroom": 40756,
+    "bathroom": 40413,
+    "balcony": 21751,
+    "living": 16999,
+    "front_door": 16995,
+    "kitchen": 16945,
+    "storage": 1797,
+    "stair": 757
+  },
+  "adjacency_pair_frequency_top_30": [
+    {
+      "pair": [
+        "bathroom",
+        "bedroom"
+      ],
+      "count": 41424
+    },
+    {
+      "pair": [
+        "bedroom",
+        "living"
+      ],
+      "count": 40456
+    },
+    {
+      "pair": [
+        "bathroom",
+        "living"
+      ],
+      "count": 29667
+    },
+    {
+      "pair": [
+        "balcony",
+        "bedroom"
+      ],
+      "count": 20478
+    },
+    {
+      "pair": [
+        "front_door",
+        "living"
+      ],
+      "count": 16983
+    },
+    {
+      "pair": [
+        "kitchen",
+        "living"
+      ],
+      "count": 16879
+    },
+    {
+      "pair": [
+        "bedroom",
+        "bedroom"
+      ],
+      "count": 10113
+    },
+    {
+      "pair": [
+        "balcony",
+        "living"
+      ],
+      "count": 8328
+    },
+    {
+      "pair": [
+        "bedroom",
+        "kitchen"
+      ],
+      "count": 8041
+    },
+    {
+      "pair": [
+        "balcony",
+        "bathroom"
+      ],
+      "count": 6882
+    },
+    {
+      "pair": [
+        "bathroom",
+        "bathroom"
+      ],
+      "count": 6862
+    },
+    {
+      "pair": [
+        "bathroom",
+        "kitchen"
+      ],
+      "count": 5748
+    },
+    {
+      "pair": [
+        "living",
+        "storage"
+      ],
+      "count": 1722
+    },
+    {
+      "pair": [
+        "bedroom",
+        "storage"
+      ],
+      "count": 980
+    },
+    {
+      "pair": [
+        "balcony",
+        "balcony"
+      ],
+      "count": 815
+    },
+    {
+      "pair": [
+        "kitchen",
+        "storage"
+      ],
+      "count": 648
+    },
+    {
+      "pair": [
+        "bathroom",
+        "storage"
+      ],
+      "count": 600
+    },
+    {
+      "pair": [
+        "living",
+        "stair"
+      ],
+      "count": 594
+    },
+    {
+      "pair": [
+        "bathroom",
+        "stair"
+      ],
+      "count": 385
+    },
+    {
+      "pair": [
+        "bedroom",
+        "stair"
+      ],
+      "count": 303
+    },
+    {
+      "pair": [
+        "bedroom",
+        "front_door"
+      ],
+      "count": 249
+    },
+    {
+      "pair": [
+        "balcony",
+        "storage"
+      ],
+      "count": 213
+    },
+    {
+      "pair": [
+        "front_door",
+        "kitchen"
+      ],
+      "count": 105
+    },
+    {
+      "pair": [
+        "front_door",
+        "stair"
+      ],
+      "count": 101
+    },
+    {
+      "pair": [
+        "balcony",
+        "stair"
+      ],
+      "count": 83
+    },
+    {
+      "pair": [
+        "kitchen",
+        "stair"
+      ],
+      "count": 81
+    },
+    {
+      "pair": [
+        "bathroom",
+        "front_door"
+      ],
+      "count": 74
+    },
+    {
+      "pair": [
+        "balcony",
+        "kitchen"
+      ],
+      "count": 71
+    },
+    {
+      "pair": [
+        "kitchen",
+        "kitchen"
+      ],
+      "count": 71
+    },
+    {
+      "pair": [
+        "balcony",
+        "front_door"
+      ],
+      "count": 26
+    }
+  ],
+  "size_ratio_by_type": {
+    "living": {
+      "count": 16999,
+      "min": 0.0033206420450929562,
+      "p10": 0.287030581958358,
+      "median": 0.35727865362924716,
+      "p90": 0.43769802927115986,
+      "max": 0.7919995489527245,
+      "mean": 0.3604695167094148
+    },
+    "kitchen": {
+      "count": 16945,
+      "min": 4.405364586650225e-07,
+      "p10": 0.0623056207757765,
+      "median": 0.08894124654195976,
+      "p90": 0.1346194021048001,
+      "max": 0.42140904155417025,
+      "mean": 0.09436790581722726
+    },
+    "bedroom": {
+      "count": 40756,
+      "min": 8.679341503264872e-06,
+      "p10": 0.10501261087884003,
+      "median": 0.15413754308324729,
+      "p90": 0.21464538110090156,
+      "max": 0.49658947483135546,
+      "mean": 0.15699482712764198
+    },
+    "bathroom": {
+      "count": 40413,
+      "min": 2.670721764128331e-06,
+      "p10": 0.026149007085972682,
+      "median": 0.03993469116964964,
+      "p90": 0.0576315203233309,
+      "max": 0.2368129847940215,
+      "mean": 0.04120986014904366
+    },
+    "balcony": {
+      "count": 21751,
+      "min": 2.84036660108472e-19,
+      "p10": 0.022501114372930352,
+      "median": 0.04260505048931931,
+      "p90": 0.08191544697599912,
+      "max": 0.5326037402885174,
+      "mean": 0.04940528350578808
+    },
+    "front_door": {
+      "count": 16995,
+      "min": 2.3658031271183222e-17,
+      "p10": 0.0016123115244708703,
+      "median": 0.0024017199408980948,
+      "p90": 0.0036922255954922106,
+      "max": 0.007292816301478537,
+      "mean": 0.002536978827877711
+    },
+    "stair": {
+      "count": 757,
+      "min": 0.0023949657526708776,
+      "p10": 0.00962096838530636,
+      "median": 0.033344571039525685,
+      "p90": 0.09637641492465704,
+      "max": 0.410923848050839,
+      "mean": 0.04866802455146832
+    },
+    "storage": {
+      "count": 1797,
+      "min": 0.004445866082221134,
+      "p10": 0.01058959265919324,
+      "median": 0.020561089474860527,
+      "p90": 0.07233091800783069,
+      "max": 0.1270806645016741,
+      "mean": 0.03052159013167756
+    }
+  }
+}
