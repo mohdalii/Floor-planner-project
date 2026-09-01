@@ -54,11 +54,15 @@ for (const [roomId, targetId] of Object.entries(attachMap)) {
 
 // Stage 3: rough first-guess placement (may overlap, may break rules - see
 // seeding.js's big comment for why that's expected and fine at this stage).
-const seeded = seedLayout(rooms, attachMap);
+// seedLayout() also returns a RESOLVED attachMap (chained for any room a
+// fan-out stack wrapped past its nominal target - see seeding.js's
+// claimPosition comment) - that resolved map, not the original one from
+// buildAttachMap() above, is what every later stage should use.
+const { rooms: seeded, attachMap: resolvedAttachMap } = seedLayout(rooms, attachMap);
 
 // Stage 4: minimal-movement refinement - fixes collisions/relationships
 // left over from seeding, while moving as little as possible.
-const solved = solveLayout(seeded, attachMap);
+const solved = solveLayout(seeded, resolvedAttachMap);
 
 console.log("\n=== Solved rooms ===");
 for (const room of solved.rooms) {
@@ -73,8 +77,15 @@ console.log(`  width: ${solved.plot.widthM.toFixed(2)} m`);
 console.log(`  depth: ${solved.plot.depthM.toFixed(2)} m`);
 console.log(`  area:  ${solved.plot.areaM2.toFixed(2)} m^2`);
 
+console.log("\n=== Resolved attach map (post-seeding, used for solving/validation) ===");
+for (const [roomId, targetId] of Object.entries(resolvedAttachMap)) {
+  const original = attachMap[roomId];
+  const chained = original !== targetId ? `  (chained - was -> ${original})` : "";
+  console.log(`  ${roomId} -> ${targetId}${chained}`);
+}
+
 // Stage 5: read-only usability checklist.
-const validation = validateLayout(solved.rooms, attachMap);
+const validation = validateLayout(solved.rooms, resolvedAttachMap);
 console.log("\n=== Validation ===");
 console.log(`  overall passed: ${validation.passed}`);
 for (const [check, ok] of Object.entries(validation.checks)) {

@@ -49,6 +49,7 @@ export function buildAttachMap(rooms) {
   const storages = byType.storage ?? [];
   const balconies = byType.balcony ?? [];
   const frontDoors = byType.front_door ?? [];
+  const hallways = byType.hallway ?? [];
 
   // The "anchor" living room everything else orbits. buildRoomProgram()
   // always creates at least one (living_0). If this function is ever
@@ -76,6 +77,44 @@ export function buildAttachMap(rooms) {
   // simplification: it's simple, fully deterministic, and matches how
   // people naturally tend to list their master bedroom first.
   const masterBedroom = bedrooms[0];
+
+  // --- Bedroom -> hallway: every bedroom's own route back to living -------
+  // THE FIX this file was missing (see docs/PLAN.md / STATUS.md Day 7-8):
+  // every rule below this point gives a bedroom a relationship pointing AT
+  // it (an en-suite bathroom, the master's balcony) - none of them ever
+  // gave a bedroom a relationship of its OWN. A bedroom with neither an
+  // en-suite bathroom nor a balcony therefore had ZERO entries in this map
+  // at all, meaning nothing downstream (seeding.js's placement, solver.js's
+  // relationship-satisfaction cost, doors.js's door-cutting) had any reason
+  // to ever connect it to the rest of the house. Confirmed systemic by the
+  // checker: 17/17 bedrooms unreachable across 5 varied room programs,
+  // including the "full en-suite" case, where a bedroom's only neighbour
+  // (its own bathroom) had no relationship back to living either - two
+  // sealed rooms, not one.
+  //
+  // roomProgram.js now always adds exactly one `hallway_0` (the same
+  // "automatic room" pattern as front_door), and every bedroom attaches to
+  // it here - the shared connector the user's own reference floor plans
+  // show explicitly. This does NOT replace a bedroom's other relationships
+  // below (an en-suite bathroom/balcony still attach TO the bedroom) - a
+  // bedroom legitimately ends up with a relationship of its own here PLUS
+  // however many relationships point at it. A plain object attach map
+  // supports this without any conflict: hallway_0 ends up being both a KEY
+  // in this object (its own entry, -> living, added right below) and a
+  // VALUE in every bedroom's entry - verified directly against how this
+  // object is actually used everywhere downstream (seeding.js/solver.js/
+  // validate.js all look up `attachMap[someId]` independently by id; none
+  // of them assume an id can only ever appear as a key OR a value, and nothing
+  // here enforces that either - a plain `{}` has no such uniqueness
+  // constraint on its values in the first place).
+  const hallway = hallways[0];
+  if (hallway) {
+    for (const bedroom of bedrooms) {
+      attachMap[bedroom.id] = hallway.id;
+    }
+    // --- Hallway -> living: the connector's own route to the shared zone --
+    attachMap[hallway.id] = mainLiving.id;
+  }
 
   // --- Bathroom <-> bedroom pairing ---------------------------------------
   if (bathrooms.length >= bedrooms.length) {

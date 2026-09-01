@@ -52,6 +52,18 @@ export function estimatePlotDimensions(rooms) {
   // rooms alone will require, before accounting for walls/circulation.
   let totalMinFraction = 0;
   for (const room of rooms) {
+    // hallway (added in the Day 7-8 fixer pass - see constants.js's
+    // HALLWAY_DEPTH_M comment) has no SIZE_RANGES entry at all: it isn't
+    // sized as a fraction of total area the way every other room type
+    // here is, because the ResPlan dataset this fraction table is mined
+    // from has no "hallway" room type to derive one from. Its rough
+    // footprint was already implicitly covered by USABLE_PLOT_FRACTION's
+    // circulation-space allowance below (see that constant's own comment -
+    // "hallway/circulation space" was explicitly called out as part of
+    // that ~18% margin even before hallway existed as an explicit room),
+    // so it's deliberately skipped from this sum rather than needing a
+    // fabricated fraction invented just to avoid the lookup below throwing.
+    if (room.type === "hallway") continue;
     const range = SIZE_RANGES[room.type];
     if (!range) {
       throw new Error(

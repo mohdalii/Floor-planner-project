@@ -73,7 +73,7 @@ Sum each room's *minimum* size fraction (`SIZE_RANGES`) → scale a baseline nom
 | 1-2 | Repo scaffold (Express + Mongoose + React/Vite already exists, wire dev scripts); `data-analysis/seed_stats.py` mines ResPlan for room-frequency / adjacency-frequency / size-ratio stats → `rule-constants.seed.json` |
 | 3-5 | Rule engine core: constants, room-program logic, attach-map, **new seeding stage**, ported minimal-movement solver, validation checklist |
 | 6 | Batch-test the rule engine against many synthetic requirement sets (no dataset "ground truth" needed here — pure generation): collision rate, boundary compliance, rule-satisfaction rate |
-| 7-8 | DXF export (hand-written) + quick 2D SVG preview in the client for fast visual iteration |
+| 7-8 | **Revised scope (user reviewed a raw preview and asked for a real fix):** CAD-style 2D rendering — connected wall network (not floating colored boxes), doors cut into shared walls with swing-arc symbols, room labels, dimension lines — matching standard architectural drafting convention (reference images the user provided). DXF export (hand-written) + this same rendering as SVG in the client. |
 | 8-9 | Cost estimation module, assumptions documented in code comments and later in the report |
 | 9-10 | Express API routes + MongoDB schemas wiring room program → seeding → solver → validation → cost → persisted plan |
 | 10-12 | React frontend: requirements form, 2D viewer, Three.js 3D viewer, cost panel, DXF download |

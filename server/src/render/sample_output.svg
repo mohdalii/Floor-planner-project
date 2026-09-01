@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="759" viewBox="0 0 1000.00 759.38">
+  <rect x="0" y="0" width="1000.00" height="759.38" fill="white" />
+  <text x="524.43" y="38.76" font-size="18" font-weight="bold" text-anchor="middle" font-family="sans-serif" fill="black">FLOOR PLAN</text>
+  <rect x="163.13" y="191.92" width="5.43" height="55.08" fill="black" />
+  <rect x="163.13" y="295.85" width="5.43" height="55.08" fill="black" />
+  <rect x="215.56" y="564.43" width="5.43" height="111.72" fill="black" />
+  <rect x="328.04" y="114.80" width="5.43" height="132.19" fill="black" />
+  <rect x="328.04" y="295.85" width="5.43" height="300.02" fill="black" />
+  <rect x="328.04" y="644.72" width="5.43" height="79.38" fill="black" />
+  <rect x="539.48" y="516.49" width="5.43" height="207.61" fill="black" />
+  <rect x="645.12" y="114.80" width="5.43" height="132.19" fill="black" />
+  <rect x="645.12" y="295.85" width="5.43" height="132.19" fill="black" />
+  <rect x="755.14" y="217.25" width="5.43" height="29.74" fill="black" />
+  <rect x="755.14" y="295.85" width="5.43" height="29.74" fill="black" />
+  <rect x="755.14" y="516.49" width="5.43" height="207.61" fill="black" />
+  <rect x="866.38" y="217.25" width="5.43" height="108.34" fill="black" />
+  <rect x="84.14" y="214.55" width="243.15" height="5.43" fill="black" />
+  <rect x="650.27" y="214.55" width="221.55" height="5.43" fill="black" />
+  <rect x="84.14" y="322.86" width="243.15" height="5.43" fill="black" />
+  <rect x="650.27" y="322.86" width="221.55" height="5.43" fill="black" />
+  <rect x="332.16" y="427.76" width="132.19" height="5.43" fill="black" />
+  <rect x="513.20" y="427.76" width="451.51" height="5.43" fill="black" />
+  <rect x="332.16" y="513.92" width="79.38" height="5.43" fill="black" />
+  <rect x="460.39" y="513.92" width="163.62" height="5.43" fill="black" />
+  <rect x="672.86" y="513.92" width="163.62" height="5.43" fill="black" />
+  <rect x="885.34" y="513.92" width="79.38" height="5.43" fill="black" />
+  <rect x="215.56" y="564.43" width="111.72" height="5.43" fill="black" />
+  <rect x="215.56" y="670.73" width="111.72" height="5.43" fill="black" />
+  <rect x="81.42" y="86.85" width="10.86" height="639.96" fill="black" />
+  <rect x="956.57" y="86.85" width="10.86" height="639.96" fill="black" />
+  <rect x="81.42" y="86.85" width="241.64" height="10.86" fill="black" />
+  <rect x="371.92" y="86.85" width="595.51" height="10.86" fill="black" />
+  <rect x="81.42" y="715.96" width="886.01" height="10.86" fill="black" />
+  <line x1="165.84" y1="246.99" x2="214.70" y2="246.99" stroke="black" stroke-width="1.4" />
+  <polyline points="165.84,295.85 170.63,295.61 175.37,294.91 180.02,293.75 184.54,292.13 188.87,290.08 192.98,287.62 196.84,284.76 200.39,281.54 203.61,277.99 206.46,274.14 208.93,270.02 210.98,265.69 212.59,261.18 213.76,256.53 214.46,251.78 214.70,246.99" fill="none" stroke="black" stroke-width="1" />
+  <line x1="330.75" y1="246.99" x2="379.60" y2="246.99" stroke="black" stroke-width="1.4" />
+  <polyline points="330.75,295.85 335.54,295.61 340.28,294.91 344.93,293.75 349.45,292.13 353.78,290.08 357.89,287.62 361.74,284.76 365.30,281.54 368.52,277.99 371.37,274.14 373.84,270.02 375.89,265.69 377.50,261.18 378.67,256.53 379.37,251.78 379.60,246.99" fill="none" stroke="black" stroke-width="1" />
+  <line x1="330.75" y1="595.87" x2="379.60" y2="595.87" stroke="black" stroke-width="1.4" />
+  <polyline points="330.75,644.72 335.54,644.49 340.28,643.78 344.93,642.62 349.45,641.00 353.78,638.95 357.89,636.49 361.74,633.63 365.30,630.41 368.52,626.86 371.37,623.01 373.84,618.90 375.89,614.56 377.50,610.05 378.67,605.40 379.37,600.66 379.60,595.87" fill="none" stroke="black" stroke-width="1" />
+  <line x1="647.83" y1="246.99" x2="598.98" y2="246.99" stroke="black" stroke-width="1.4" />
+  <polyline points="647.83,295.85 643.04,295.61 638.30,294.91 633.65,293.75 629.13,292.13 624.80,290.08 620.69,287.62 616.84,284.76 613.29,281.54 610.07,277.99 607.21,274.14 604.74,270.02 602.69,265.69 601.08,261.18 599.91,256.53 599.21,251.78 598.98,246.99" fill="none" stroke="black" stroke-width="1" />
+  <line x1="757.86" y1="246.99" x2="709.00" y2="246.99" stroke="black" stroke-width="1.4" />
+  <polyline points="757.86,295.85 753.07,295.61 748.33,294.91 743.68,293.75 739.16,292.13 734.83,290.08 730.72,287.62 726.86,284.76 723.31,281.54 720.09,277.99 717.24,274.14 714.77,270.02 712.72,265.69 711.11,261.18 709.94,256.53 709.24,251.78 709.00,246.99" fill="none" stroke="black" stroke-width="1" />
+  <line x1="464.35" y1="430.48" x2="464.35" y2="381.62" stroke="black" stroke-width="1.4" />
+  <polyline points="513.20,430.48 512.97,425.69 512.26,420.95 511.10,416.29 509.48,411.78 507.43,407.45 504.97,403.33 502.11,399.48 498.89,395.93 495.34,392.71 491.49,389.86 487.38,387.39 483.04,385.34 478.53,383.73 473.88,382.56 469.14,381.86 464.35,381.62" fill="none" stroke="black" stroke-width="1" />
+  <line x1="411.53" y1="516.63" x2="411.53" y2="467.78" stroke="black" stroke-width="1.4" />
+  <polyline points="460.39,516.63 460.15,511.84 459.45,507.10 458.28,502.45 456.67,497.94 454.62,493.60 452.15,489.49 449.30,485.64 446.08,482.09 442.53,478.87 438.67,476.01 434.56,473.55 430.23,471.50 425.71,469.88 421.06,468.72 416.32,468.01 411.53,467.78" fill="none" stroke="black" stroke-width="1" />
+  <line x1="624.01" y1="516.63" x2="624.01" y2="467.78" stroke="black" stroke-width="1.4" />
+  <polyline points="672.86,516.63 672.63,511.84 671.92,507.10 670.76,502.45 669.14,497.94 667.09,493.60 664.63,489.49 661.77,485.64 658.55,482.09 655.00,478.87 651.15,476.01 647.04,473.55 642.71,471.50 638.19,469.88 633.54,468.72 628.80,468.01 624.01,467.78" fill="none" stroke="black" stroke-width="1" />
+  <line x1="836.49" y1="516.63" x2="836.49" y2="467.78" stroke="black" stroke-width="1.4" />
+  <polyline points="885.34,516.63 885.11,511.84 884.40,507.10 883.24,502.45 881.62,497.94 879.57,493.60 877.11,489.49 874.25,485.64 871.03,482.09 867.48,478.87 863.63,476.01 859.52,473.55 855.18,471.50 850.67,469.88 846.02,468.72 841.28,468.01 836.49,467.78" fill="none" stroke="black" stroke-width="1" />
+  <line x1="323.06" y1="92.28" x2="323.06" y2="141.13" stroke="black" stroke-width="1.4" />
+  <polyline points="371.92,92.28 371.68,97.07 370.98,101.81 369.81,106.46 368.20,110.98 366.15,115.31 363.68,119.42 360.83,123.27 357.61,126.82 354.05,130.04 350.20,132.90 346.09,135.37 341.76,137.42 337.24,139.03 332.59,140.20 327.85,140.90 323.06,141.13" fill="none" stroke="black" stroke-width="1" />
+  <text x="435.96" y="612.97" font-size="16.0" font-weight="bold" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="black">MASTER BEDROOM</text>
+  <text x="435.96" y="630.50" font-size="11.0" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="#333333">3.72m x 3.72m</text>
+  <text x="648.44" y="612.97" font-size="16.0" font-weight="bold" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="black">BEDROOM 2</text>
+  <text x="648.44" y="630.50" font-size="11.0" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="#333333">3.72m x 3.72m</text>
+  <text x="860.91" y="612.97" font-size="16.0" font-weight="bold" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="black">BEDROOM 3</text>
+  <text x="860.91" y="630.50" font-size="11.0" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="#333333">3.72m x 3.72m</text>
+  <text x="704.43" y="264.10" font-size="15.3" font-weight="bold" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="black">BATHROOM 1</text>
+  <text x="704.43" y="281.20" font-size="11.0" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="#333333">1.90m x 1.90m</text>
+  <text x="817.64" y="264.10" font-size="15.3" font-weight="bold" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="black">BATHROOM 2</text>
+  <text x="817.64" y="281.20" font-size="11.0" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="#333333">1.90m x 1.90m</text>
+  <text x="247.78" y="264.10" font-size="16.0" font-weight="bold" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="black">KITCHEN</text>
+  <text x="247.78" y="281.62" font-size="11.0" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="#333333">2.83m x 2.83m</text>
+  <text x="488.78" y="264.10" font-size="16.0" font-weight="bold" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="black">LIVING ROOM</text>
+  <text x="488.78" y="281.62" font-size="11.0" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="#333333">5.67m x 5.67m</text>
+  <text x="271.42" y="612.97" font-size="16.0" font-weight="bold" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="black">BALCONY</text>
+  <text x="271.42" y="630.50" font-size="11.0" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="#333333">1.96m x 1.96m</text>
+  <text x="123.77" y="265.58" font-size="15.6" font-weight="bold" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="black">STORAGE</text>
+  <text x="123.77" y="281.42" font-size="8.4" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="#333333">1.36m x 1.36m</text>
+  <text x="648.44" y="464.94" font-size="16.0" font-weight="bold" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="black">HALLWAY</text>
+  <text x="648.44" y="482.47" font-size="11.0" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="#333333">11.55m x 1.35m</text>
+  <line x1="86.85" y1="92.28" x2="86.85" y2="48.24" stroke="#555555" stroke-width="0.75" />
+  <line x1="962.00" y1="92.28" x2="962.00" y2="48.24" stroke="#555555" stroke-width="0.75" />
+  <line x1="86.85" y1="48.24" x2="962.00" y2="48.24" stroke="black" stroke-width="1" />
+  <line x1="80.88" y1="54.21" x2="92.82" y2="42.27" stroke="black" stroke-width="1.5" />
+  <line x1="956.03" y1="54.21" x2="967.97" y2="42.27" stroke="black" stroke-width="1.5" />
+  <text x="524.43" y="69.74" font-size="11.0" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="black" transform="rotate(0 524.43 69.74)">16.12 m</text>
+  <line x1="86.85" y1="92.28" x2="38.00" y2="92.28" stroke="#555555" stroke-width="0.75" />
+  <line x1="86.85" y1="721.38" x2="38.00" y2="721.38" stroke="#555555" stroke-width="0.75" />
+  <line x1="38.00" y1="92.28" x2="38.00" y2="721.38" stroke="black" stroke-width="1" />
+  <line x1="32.03" y1="86.31" x2="43.97" y2="98.25" stroke="black" stroke-width="1.5" />
+  <line x1="32.03" y1="715.41" x2="43.97" y2="727.36" stroke="black" stroke-width="1.5" />
+  <text x="16.50" y="406.83" font-size="11.0" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="black" transform="rotate(-90 16.50 406.83)">11.59 m</text>
+</svg>

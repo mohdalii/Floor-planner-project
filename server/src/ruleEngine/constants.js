@@ -93,6 +93,50 @@ for (const type of ROOM_TYPES) {
 }
 
 // --------------------------------------------------------------------------
+// HALLWAY_DEPTH_M
+// --------------------------------------------------------------------------
+// `hallway` is a new, always-present room type (see roomProgram.js) added
+// in this pass to close a real gap the checker found: attachMap.js used to
+// give bedrooms no relationship of their OWN pointing back toward living at
+// all (a bedroom was only ever a TARGET - for an en-suite bathroom or a
+// balcony - never a source), so a bedroom could be fully geometrically
+// sealed off with zero doors to the rest of the house. A hallway is the
+// fix: a shared connector that borders living on one side and the whole
+// bedroom row on the other, the same way the user's own reference floor
+// plans show one.
+//
+// hallway is deliberately NOT added to ROOM_TYPES/SIZE_RANGES above. Those
+// two exports are built entirely from seed.size_ratio_by_type, and the
+// ResPlan dataset this project mines has no "hallway" room type at all -
+// checked directly, not assumed: data-analysis/output/rule-constants.seed.json's
+// room_type_frequency only ever had bedroom/bathroom/balcony/living/
+// front_door/kitchen/storage/stair keys, no "hallway" among them. There is
+// no real-world percentile to derive a size fraction from here the way
+// every other room type gets one.
+//
+// A hallway also isn't sized the way every other room here is anyway.
+// Every other type gets a SQUARE whose AREA is a fixed fraction of the
+// whole plan (see sizeOf() in seeding.js), which makes no architectural
+// sense for a corridor: a corridor's defining dimension is its DEPTH (how
+// far you walk sideways to step from the bedroom row into it), which real
+// buildings hold to a narrow, fairly constant figure regardless of how big
+// the home is - while its WIDTH has to span however wide the specific
+// bedroom row it serves turns out to be. That's a genuinely different
+// sizing rule (fixed depth + measured width), not a fraction-of-total-area
+// rule, so it gets its own dedicated constant here instead of a
+// SIZE_RANGES entry - see seeding.js for where this actually gets turned
+// into a placed box.
+//
+// 1.2m is close to the practical minimum a residential corridor needs
+// (enough for one person to walk through comfortably, per standard
+// accessibility/building-code guidance); 1.5m is comfortably generous.
+// 1.35m (the midpoint) is used as a single fixed value rather than a
+// range, matching how every other room type here is also always seeded at
+// exactly its own single "target" figure, never something else within its
+// min/target/max band (see sizeOf() in seeding.js).
+export const HALLWAY_DEPTH_M = 1.35;
+
+// --------------------------------------------------------------------------
 // AVG_OTHER_ROOMS_PER_PLAN
 // --------------------------------------------------------------------------
 // How many NON-LIVING rooms a real ResPlan plan has on average. This exists
@@ -141,7 +185,20 @@ export const AVG_OTHER_ROOMS_PER_PLAN =
 //                      alone - before anything else can sensibly be placed.
 //   bedroom (85)    - the private zone. Needs living placed first (bedrooms
 //                      sit "behind" it), but nothing else needs bedrooms
-//                      placed first except bathrooms, which come next.
+//                      placed first except hallway, which comes next.
+//   hallway (80)    - the shared connector between the bedroom zone and
+//                      living (see HALLWAY_DEPTH_M above), added in this
+//                      pass. Has to be placed AFTER the bedroom row (its
+//                      own width is measured from wherever the bedrooms
+//                      actually ended up), so it sits just below bedroom in
+//                      this tier list - but still ranks above bathroom,
+//                      kitchen, storage and balcony, since those rooms'
+//                      seeded positions must never be allowed to shove a
+//                      hallway off the exact, by-construction shared wall
+//                      it was placed to have with every bedroom (a bathroom
+//                      or balcony colliding with the hallway is THEIR
+//                      problem to yield on, not the hallway's - see
+//                      isRelevantCollider in solver.js).
 //   bathroom (70)   - attaches to a specific bedroom (en-suite) or to living
 //                      (shared hall bathroom) - either way it needs its
 //                      target to already exist, so it comes after both.
@@ -163,6 +220,7 @@ export const AVG_OTHER_ROOMS_PER_PLAN =
 export const PRIORITY = {
   living: 100,
   bedroom: 85,
+  hallway: 80,
   bathroom: 70,
   kitchen: 60,
   storage: 40,

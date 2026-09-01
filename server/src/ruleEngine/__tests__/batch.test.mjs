@@ -40,9 +40,13 @@ import { validateLayout } from "../validate.js";
 function runOne(requirements) {
   const rooms = buildRoomProgram(requirements);
   const attachMap = buildAttachMap(rooms);
-  const seeded = seedLayout(rooms, attachMap);
-  const solved = solveLayout(seeded, attachMap);
-  const validation = validateLayout(solved.rooms, attachMap);
+  // seedLayout() returns a RESOLVED attachMap (chained for any room a
+  // fan-out stack wrapped past its nominal target) alongside the seeded
+  // rooms - see seeding.js's claimPosition comment. Every later stage uses
+  // that resolved map, not the original buildAttachMap() output.
+  const { rooms: seeded, attachMap: resolvedAttachMap } = seedLayout(rooms, attachMap);
+  const solved = solveLayout(seeded, resolvedAttachMap);
+  const validation = validateLayout(solved.rooms, resolvedAttachMap);
   return { requirements, validation, plot: solved.plot };
 }
 
@@ -172,6 +176,18 @@ test("batch sweep: collision rate, boundary compliance, rule-satisfaction rate",
     "frontDoorNearLiving",
     "kitchenAdjacentToLiving",
     "ensuiteBathroomsAdjacent",
+    // Added in the Day 7-8 fixer pass, then GENERALIZED (still Day 7-8, a
+    // later pass) from a bedroom-only single-hop check into a real BFS
+    // reachability check over every room type - see validate.js check 8's
+    // own comment for the full story: the bedroom-only version held up
+    // fine on its own terms, but a reviewer found it had no way to catch a
+    // much bigger, separate defect (60.7% of this exact sweep produced at
+    // least one sealed bathroom/storage room with zero doors anywhere).
+    // This generalized check is what would have caught that, and now does
+    // - it belongs in the same zero-tolerance "unbuildable geometry" bucket
+    // as noOverlaps, not the softer statistical livingNotOversized
+    // judgement call below.
+    "everyRoomReachableFromLiving",
   ]) {
     assert.equal(
       summary.failCounts[hardCheck],

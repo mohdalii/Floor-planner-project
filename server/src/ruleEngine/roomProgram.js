@@ -126,6 +126,21 @@ export function buildRoomProgram(requirements = {}) {
     }
   }
 
+  // Every home also gets exactly one hallway connecting the private bedroom
+  // zone back to the shared part of the house - the same "automatic room,
+  // not a user-supplied count" pattern as front_door directly below, and
+  // for a related reason: without it, attachMap.js has no way to give a
+  // bedroom a relationship of its own pointing back toward living (a
+  // bedroom was previously only ever the TARGET of a relationship - an
+  // en-suite bathroom, a balcony - never its source), so a bedroom could be
+  // fully sealed off with zero doors to the rest of the house. hallway
+  // isn't part of ROOM_TYPES's per-type loop above (and so isn't something
+  // `requirements` can ask for a count of) because it has no ResPlan
+  // dataset entry to validate a count/size against in the first place - see
+  // constants.js's HALLWAY_DEPTH_M comment. It's structural, not a room the
+  // user chooses a quantity of, same as front_door.
+  rooms.push({ id: "hallway_0", type: "hallway", typeIndex: 0 });
+
   // Every home has exactly one main entrance - this isn't a count the user
   // supplies, so it's added unconditionally rather than read from
   // `requirements`.

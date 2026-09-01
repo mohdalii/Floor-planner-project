@@ -8,6 +8,9 @@ node_modules/
 # local mongo data if ever placed inside the repo
 .mongo-data/
 
+# throwaway visual previews, never committed
+.preview/
+
 # python
 __pycache__/
 *.pyc

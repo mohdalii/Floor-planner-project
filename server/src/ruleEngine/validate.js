@@ -12,6 +12,7 @@
 // fails it would actually be a bad floor plan to hand someone.
 
 import { SIZE_RANGES, AVG_OTHER_ROOMS_PER_PLAN } from "./constants.js";
+import { estimatePlotDimensions } from "./plotSizing.js";
 
 // These three tolerances intentionally match solver.js's COLLISION_EPS /
 // ADJACENCY_TOLERANCE / EXTERIOR_TOLERANCE (re-declared here rather than
@@ -33,6 +34,20 @@ const EXTERIOR_TOLERANCE = 0.01;
 // living room (one that's swallowed space that should have gone
 // elsewhere) gets flagged.
 const OVERSIZE_TOLERANCE_MULTIPLIER = 1.15;
+
+// A real door needs a real, non-trivial stretch of shared wall to sit in -
+// not just two boxes whose bounding-box GAP happens to be small. Two rooms
+// can be "gapBetween-close" (see gapBetween below) while only touching at a
+// near-zero-length corner, which isn't a wall they actually share. Mirrors
+// doors.js's own MIN_SHARED_SPAN (0.30m - a standard minimum architectural
+// door-wall span, not derived from this project's data) converted into
+// THIS file's unit space via the same metersPerUnit factor the render
+// layer uses, rather than importing doors.js's real-metre logic directly -
+// this file's own convention throughout (see the geometry-helpers comment
+// below) is to duplicate cross-file geometry rather than cross-import it,
+// so it stays readable in isolation; see doors.js for the original figure
+// this is kept consistent with.
+const MIN_SHARED_SPAN_M = 0.30;
 
 // ---------------------------------------------------------------------
 // Geometry helpers (functionally identical to the ones in solver.js, with
@@ -92,6 +107,115 @@ function isSideExterior(box, side, otherBoxes) {
   return true;
 }
 
+// Do `a` and `b` share a REAL wall - not just a close bounding-box gap, but
+// an actual overlapping span along a shared edge, wide enough to plausibly
+// hold a door? Unit-space equivalent of doors.js's sharedEdge: checks both
+// possible pairings per axis (a's right against b's left, AND a's left
+// against b's right; same for top/bottom), since this project's attach map
+// doesn't record which side of which room is which. This is the check
+// this milestone's whole reason for existing needed: gapBetween() alone
+// (used by every OTHER adjacency check in this file) can't tell "genuinely
+// sharing a wall" apart from "bounding boxes happen to be close" - that
+// gap is exactly what let the balcony/en-suite-bathroom seeding collision
+// (fixed in seeding.js this same pass) go undetected by this file
+// entirely; nothing here ever checked balcony-to-target adjacency at all
+// until this check was added.
+function hasSharedWall(a, b, metersPerUnit) {
+  const minSpan = MIN_SHARED_SPAN_M / metersPerUnit;
+  const aLeft = a.cx - a.w / 2;
+  const aRight = a.cx + a.w / 2;
+  const aTop = a.cy - a.h / 2;
+  const aBottom = a.cy + a.h / 2;
+  const bLeft = b.cx - b.w / 2;
+  const bRight = b.cx + b.w / 2;
+  const bTop = b.cy - b.h / 2;
+  const bBottom = b.cy + b.h / 2;
+
+  for (const [xa, xb] of [
+    [aRight, bLeft],
+    [aLeft, bRight],
+  ]) {
+    const gap = Math.abs(xa - xb);
+    const spanStart = Math.max(aTop, bTop);
+    const spanEnd = Math.min(aBottom, bBottom);
+    if (gap <= ADJACENCY_TOLERANCE && spanEnd - spanStart > minSpan) return true;
+  }
+  for (const [ya, yb] of [
+    [aBottom, bTop],
+    [aTop, bBottom],
+  ]) {
+    const gap = Math.abs(ya - yb);
+    const spanStart = Math.max(aLeft, bLeft);
+    const spanEnd = Math.min(aRight, bRight);
+    if (gap <= ADJACENCY_TOLERANCE && spanEnd - spanStart > minSpan) return true;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------
+// General reachability graph (this pass - see check 8 below for the full
+// story of why this replaced the old bedroom-only, single-hop version).
+//
+// Builds an UNDIRECTED graph over every room, where an edge between two
+// rooms exists ONLY IF (a) attachMap actually records a relationship
+// between them in either direction, AND (b) hasSharedWall confirms that
+// relationship corresponds to a REAL, physical, door-sized shared wall -
+// mirroring EXACTLY what doors.js's placeInteriorDoors does (it iterates
+// attachMap's relationships and cuts a door only when its own sharedEdge
+// check finds a genuine shared span; hasSharedWall here is this file's
+// unit-space equivalent of that same geometric test). This is a
+// deliberate, important choice, not an equivalent shortcut: a graph built
+// from PURE geometry (any two rooms that happen to physically touch,
+// attachMap or not) would have missed the exact defect this check exists
+// to catch - the sealed-bathroom/sealed-storage bug this pass fixed had
+// two rooms that DID physically touch (e.g. bathroom_1 touching
+// bathroom_0), but attachMap never told doors.js to cut a door on that
+// specific wall (it labelled bathroom_1's target as `living`, which it did
+// NOT physically touch) - so no door ever existed there, even though the
+// wall did. Restricting graph edges to attachMap relationships that ALSO
+// pass hasSharedWall models "is there actually a door here", which is the
+// real question this check needs to answer, not just "do these two rooms'
+// boxes happen to be near each other".
+//
+// front_door's own relationship is excluded from the graph entirely - it's
+// an exterior-wall opening, not an interior door between two habitable
+// rooms (doors.js's placeInteriorDoors skips it for the same reason), so it
+// shouldn't be treated as a pass-through connector for other rooms' own
+// reachability.
+function buildDoorReachabilityGraph(solvedRooms, attachMap, metersPerUnit) {
+  const byId = new Map(solvedRooms.map((room) => [room.id, room]));
+  const adjacency = new Map(solvedRooms.map((room) => [room.id, []]));
+
+  for (const [srcId, targetId] of Object.entries(attachMap)) {
+    const a = byId.get(srcId);
+    const b = byId.get(targetId);
+    if (!a || !b) continue;
+    if (a.type === "front_door" || b.type === "front_door") continue;
+    if (!hasSharedWall(a, b, metersPerUnit)) continue;
+    adjacency.get(a.id).push(b.id);
+    adjacency.get(b.id).push(a.id);
+  }
+
+  return adjacency;
+}
+
+// Plain breadth-first search: every room id reachable from any of `sources`
+// by following the graph's edges, `sources` themselves included.
+function bfsReachable(adjacency, sources) {
+  const visited = new Set(sources);
+  const queue = [...sources];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    for (const neighbor of adjacency.get(current) ?? []) {
+      if (!visited.has(neighbor)) {
+        visited.add(neighbor);
+        queue.push(neighbor);
+      }
+    }
+  }
+  return visited;
+}
+
 // A room counts as "on the exterior" if AT LEAST ONE of its four walls has
 // nothing else standing directly beyond it (see isSideExterior above). It
 // doesn't need open air on every side - just one true exterior wall, e.g.
@@ -122,6 +246,14 @@ export function validateLayout(solvedRooms, attachMap) {
   // Every OTHER room besides `room` itself - used for exterior checks,
   // where a room's own box must never be compared against a copy of itself.
   const others = (room) => solvedRooms.filter((r) => r.id !== room.id);
+
+  // estimatePlotDimensions() only ever reads each room's `.type`, never a
+  // position, so re-deriving metersPerUnit here on the solved room list
+  // reproduces the exact same factor solveLayout()/the render layer used
+  // internally - same safe re-derivation pattern used throughout this
+  // codebase (see wallNetwork.js's own comment on it). Needed by
+  // hasSharedWall's real-metre MIN_SHARED_SPAN_M threshold below.
+  const { metersPerUnit } = estimatePlotDimensions(solvedRooms);
 
   // ---- 1. No overlaps ------------------------------------------------------
   // Two rooms occupying the same floor space is the single most basic way
@@ -244,6 +376,54 @@ export function validateLayout(solvedRooms, attachMap) {
   checks.livingNotOversized =
     livingRooms.length === 0 ||
     livingFraction <= expectedMaxFraction * OVERSIZE_TOLERANCE_MULTIPLIER;
+
+  // ---- 8. Every room has a real, door-reachable path back to living --------
+  // GENERALIZED this pass from a bedroom-only, single-hop check into a real
+  // graph/BFS reachability check over every room type - see STATUS.md's Day
+  // 7-8 reviewer close-out for the full story of why the narrower version
+  // wasn't enough: it independently verified the ORIGINAL bedroom fix (an
+  // automatic `hallway` room, every bedroom attached to it, the hallway
+  // attached to living) held up completely, but then found a NEW,
+  // considerably bigger problem the bedroom-only check had no way to catch
+  // at all - 60.7% of a 672-combination sweep (408/672) produced at least
+  // one room with literally zero doors anywhere (640 sealed-bathroom
+  // instances, 168 sealed-storage instances), including the project's own
+  // recurring 3-bed/2-bath demo scenario and an entirely ordinary 4-bed/
+  // 2-bath request. Root cause (seeding.js's claimPosition, fixed this same
+  // pass): when several same-type siblings share one attach target and fan
+  // out past that target's own edge length, only the FIRST one genuinely
+  // touches the target - every later one only touches the SIBLING beside
+  // it, but attachMap.js kept labelling all of them "-> target" regardless,
+  // so doors.js correctly found no real wall for the mislabelled ones and
+  // cut no door at all. No check in this file ever looked at that (every
+  // check above only verifies a room's relationship to ITS OWN nominal
+  // attach target, one hop, never asking "but is there actually a
+  // MULTI-hop path back to living through whatever it's really touching").
+  //
+  // This check verifies exactly that: build a graph whose edges are
+  // attachMap relationships that ALSO pass hasSharedWall (i.e. relationships
+  // doors.js would actually cut a real door for - see
+  // buildDoorReachabilityGraph's own comment for why "real door", not just
+  // "physically touches", is the right standard here), then BFS from every
+  // living room and confirm every OTHER room - except hallway and
+  // front_door, which have their own dedicated checks/roles rather than
+  // needing to independently reach living themselves - shows up as
+  // reachable. Chained, multi-hop paths (bedroom -> hallway -> living;
+  // bathroom_2 -> bathroom_1 -> bathroom_0 -> living, once seeding.js's
+  // fix resolves that chain into the attach map) are exactly what BFS is
+  // for, not a special case - this is the "not a shortcut that only checks
+  // one hop" requirement this pass was asked to satisfy.
+  const livingRoomIds = solvedRooms
+    .filter((room) => room.type === "living")
+    .map((room) => room.id);
+  const reachabilityGraph = buildDoorReachabilityGraph(solvedRooms, attachMap, metersPerUnit);
+  const reachableFromLiving = bfsReachable(reachabilityGraph, livingRoomIds);
+  const roomsNeedingReachability = solvedRooms.filter(
+    (room) => room.type !== "living" && room.type !== "hallway" && room.type !== "front_door"
+  );
+  checks.everyRoomReachableFromLiving =
+    livingRoomIds.length > 0 &&
+    roomsNeedingReachability.every((room) => reachableFromLiving.has(room.id));
 
   // The layout passes overall only if every single check passed - one
   // failing check is enough to fail the whole plan, since each check
