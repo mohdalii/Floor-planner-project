@@ -42,7 +42,13 @@
 // numbers.
 // ===========================================================================
 
-import { PRIORITY, SIZE_RANGES, HALLWAY_DEPTH_M } from "./constants.js";
+import {
+  PRIORITY,
+  SIZE_RANGES,
+  HALLWAY_DEPTH_M,
+  ASPECT_RATIO_BY_TYPE,
+  MASTER_BEDROOM_AREA_BOOST,
+} from "./constants.js";
 import { estimatePlotDimensions } from "./plotSizing.js";
 
 // Small fixed gap left between adjacent rooms during seeding, purely so the
@@ -96,18 +102,142 @@ export function seedLayout(rooms, attachMap) {
   // nominal target (the common case) returns an attachMap that is
   // behaviourally identical to the input.
   const resolvedAttachMap = { ...attachMap };
-  // Every room type gets a plain SQUARE starting size, whose area equals
-  // SIZE_RANGES[type].target - the median real-world size for that type
-  // across the 17,000-plan dataset. A square is obviously not the final
-  // shape most real rooms end up as, but it's a simple, defensible starting
-  // guess: side = sqrt(area) is just the definition of a square's side
-  // length given its area, and nothing later in this file changes w/h
-  // independently, so "square" is an honest description of what gets
-  // placed, not a shape solver.js is expected to have already corrected.
-  const sizeOf = (type) => {
-    const targetArea = SIZE_RANGES[type].target;
-    const side = Math.sqrt(targetArea);
-    return { w: side, h: side };
+
+  // ===========================================================================
+  // sizeOf() - room shape.
+  //
+  // FIX (this pass): the previous version of this function gave every room a
+  // plain SQUARE (side = sqrt(area)) - the right AREA, but a shape almost no
+  // real room actually has. This was invisible to every check this project
+  // had run so far (validate.js only ever checks overlap/adjacency/exterior
+  // relationships, never a room's own proportions, and the batch sweep only
+  // ever measured pass/fail on THOSE checks) - it only became obvious the
+  // first time someone actually rendered the layout to an image and looked
+  // at it: every bedroom, both bathrooms, the kitchen, living, storage - all
+  // perfect squares, and the three bedrooms were literally identical
+  // (same type -> same SIZE_RANGES.target -> same sqrt(area) -> same square).
+  //
+  // Fixed using ASPECT_RATIO_BY_TYPE (constants.js) - the real long:short
+  // side ratio for each room type, mined from the same 17,000-plan ResPlan
+  // dataset SIZE_RANGES already comes from. The algebra, worked out (and
+  // checked) here rather than assumed:
+  //   Let A = target area, R = long:short ratio (R >= 1), long/short sides
+  //   L and S. We need two equations satisfied simultaneously:
+  //     (1) L * S = A          (the rectangle's area is still A - this
+  //                              function must not change how much floor
+  //                              area a room gets, only its shape)
+  //     (2) L / S = R          (the two sides are in the real dataset ratio)
+  //   From (2), L = R * S. Substitute into (1): (R * S) * S = A, so
+  //   R * S^2 = A, so S^2 = A / R, so S = sqrt(A / R). Then from (2) again,
+  //   L = R * S = R * sqrt(A / R) = sqrt(R^2 * A / R) = sqrt(A * R).
+  //   Sanity check both original equations with these: L * S =
+  //   sqrt(A*R) * sqrt(A/R) = sqrt((A*R)*(A/R)) = sqrt(A^2) = A. Correct.
+  //   L / S = sqrt(A*R) / sqrt(A/R) = sqrt((A*R)/(A/R)) = sqrt(R^2) = R.
+  //   Correct. So L = sqrt(A * R), S = sqrt(A / R) - both checked, not just
+  //   asserted.
+  //
+  // Which physical axis (w or h) gets the LONG value is a per-type judgement
+  // call - the dataset only tells us the RATIO between a real room's two
+  // sides, not which of "width" or "height" (both arbitrary axis labels in
+  // this file's own coordinate convention) that long side maps to for a
+  // room placed a particular way. LONG_AXIS_BY_TYPE below records that
+  // choice explicitly, with the reasoning for each type, rather than leaving
+  // it implicit:
+  //   - bedroom -> long side is w. Bedrooms sit side-by-side in a row
+  //     (bedroomCursorX below); giving each one a wider frontage (w) than
+  //     depth (h) matches a common real layout (windows/wardrobe along one
+  //     long wall) without materially changing how the row itself is built.
+  //   - bathroom -> long side is w. Two things point the same way here:
+  //     physically plausible (a bath/shower run along one long wall, door on
+  //     a short wall), AND it helps this project's own fan-out mechanism
+  //     (peekEdgeSlot/commitEdgeSlot above): a "hall" bathroom attaches to
+  //     living via its LEFT/RIGHT side, where the ALONG-THE-WALL dimension
+  //     that determines how many bathrooms fit before overflowing to a
+  //     second edge is h, not w (see perpExtentFor below) - keeping w long
+  //     (so h stays the shorter side) keeps more bathrooms fitting on
+  //     living's real wall directly, which is exactly what the previous
+  //     fixer/reviewer pass's redesign (see the big comment above) was built
+  //     to maximize.
+  //   - kitchen -> long side is w, for the same "along-wall dimension is h"
+  //     reasoning as bathroom (kitchen also fans out off living's LEFT
+  //     side), and a plausible real shape too (a galley-style counter run
+  //     along one long wall).
+  //   - storage -> long side is w, matching kitchen/bathroom's reasoning (it
+  //     also fans out off a LEFT side - kitchen's or living's) and a
+  //     plausible shape for a simple utility room (shelving along one wall).
+  //   - living -> long side is h (depth), the one type here where the
+  //     "long = w" pattern above is deliberately NOT used. Living is the
+  //     TARGET every bathroom/kitchen/storage fan-out above measures its
+  //     available LEFT/RIGHT edge length against (edgeLength(target,
+  //     "right"|"left") returns target.h - see that function's own
+  //     comment). Making living's long side h (not w) means that edge
+  //     length grows rather than shrinks relative to the old square
+  //     baseline, which keeps this project's carefully-tuned "genuine
+  //     independent frontage, not a fabricated same-type chain" mechanism at
+  //     least as generous as it was before this pass - shrinking it back
+  //     down would risk silently re-inflating the sealed-room rate the
+  //     previous redesign pass measured and fixed. This is also physically
+  //     defensible on its own (an elongated open living/dining zone running
+  //     back from the street-facing wall is a completely normal real
+  //     layout), not just a workaround.
+  //   - balcony -> long side is h. A balcony's dominant real placement in
+  //     this project (attachMap.js: balconies[0] always targets the master
+  //     bedroom) uses side "left" (see the balcony block below) - and for a
+  //     LEFT/RIGHT attachment, the along-the-wall dimension is h, the
+  //     depth-away-from-the-target dimension is w (mirrors the
+  //     bathroom/kitchen reasoning above, just read in the opposite
+  //     direction because a balcony is the one type here that's normally
+  //     WIDE along its wall and SHALLOW in depth, not the other way round -
+  //     exactly the "wide-and-shallow strip against an exterior wall" shape
+  //     real balconies actually have). Extra balconies beyond the first
+  //     (side "front", off living directly) are the rarer case
+  //     (attachMap.js only reaches this for a 2nd+ balcony) - not the shape
+  //     this choice was optimized for, but not an unreasonable shape for
+  //     that case either.
+  //   - front_door -> deliberately left OUT of this table entirely (falls
+  //     through to the plain-square fallback below). Checked how it's
+  //     actually used before deciding this: front_door is a small marker
+  //     box, not a real room - wallNetwork.js explicitly excludes it from
+  //     contributing wall edges, svgRenderer.js never draws a label for it,
+  //     and placeFrontDoor() in doors.js decides which exterior wall it
+  //     belongs on using only its CENTRE point (cx/cy), never its w/h. Its
+  //     shape genuinely doesn't matter downstream, so there's no reason to
+  //     add a real-world door-marker aspect ratio here - it would be a
+  //     no-op dressed up as a fix.
+  const LONG_AXIS_BY_TYPE = {
+    bedroom: "w",
+    bathroom: "w",
+    kitchen: "w",
+    storage: "w",
+    living: "h",
+    balcony: "h",
+    // front_door intentionally has no entry - see the comment above.
+  };
+
+  // `targetAreaOverride` lets a caller size a specific room instance at a
+  // DIFFERENT area than SIZE_RANGES[type].target without needing its own
+  // copy of this function - used below for the master bedroom's area boost
+  // (see the bedroom-placement block), the only place in this file that
+  // ever needs a non-default area for an otherwise-ordinary room type.
+  const sizeOf = (type, targetAreaOverride) => {
+    const targetArea = targetAreaOverride ?? SIZE_RANGES[type].target;
+    const longAxis = LONG_AXIS_BY_TYPE[type];
+    const ratio = ASPECT_RATIO_BY_TYPE[type];
+    // Falls back to a plain square whenever there's no real-data ratio to
+    // apply (front_door, per the comment above) OR the ratio itself is
+    // (as every ratio in this dataset is defined to be) >= 1 but happens to
+    // round to exactly 1 - a degenerate rectangle with ratio 1 IS a square,
+    // so sqrt(area) is both the simplest and the mathematically correct
+    // thing to compute in that case anyway.
+    if (!longAxis || !ratio || ratio <= 1) {
+      const side = Math.sqrt(targetArea);
+      return { w: side, h: side };
+    }
+    // See the big comment above this function for the derivation: long side
+    // = sqrt(area * ratio), short side = sqrt(area / ratio).
+    const long = Math.sqrt(targetArea * ratio);
+    const short = Math.sqrt(targetArea / ratio);
+    return longAxis === "w" ? { w: long, h: short } : { w: short, h: long };
   };
 
   // Rooms actually placed so far, keyed by id, so later rooms in the
@@ -599,14 +729,28 @@ export function seedLayout(rooms, attachMap) {
   // --- bedroom: the private zone, one row directly behind living ---
   let bedroomCursorX = 0;
   for (const room of byType.bedroom ?? []) {
-    const size = sizeOf(room.type);
+    // room.typeIndex === 0 here is the "master" bedroom - buildAttachMap
+    // already knows this and points balconies/bathrooms at it directly via
+    // attachMap, and this is the same convention used to size it bigger.
+    // Before this pass, every bedroom (master or not) got the exact same
+    // SIZE_RANGES.bedroom.target area, so a 3-bedroom plan always rendered 3
+    // IDENTICALLY-sized bedrooms - real houses don't do this (real data:
+    // MASTER_BEDROOM_AREA_BOOST, constants.js - a real plan's biggest
+    // bedroom is typically ~18% bigger than its OTHER bedrooms' average).
+    // Since every non-master bedroom here still gets the plain
+    // SIZE_RANGES.bedroom.target area (unchanged), boosting ONLY the
+    // master's target area by that same 1.18 factor before sizing it
+    // reproduces that exact real-world ratio by construction: master area /
+    // (unweighted) average of the others = target*1.18 / target = 1.18.
+    const isMaster = room.typeIndex === 0;
+    const targetArea = isMaster
+      ? SIZE_RANGES.bedroom.target * MASTER_BEDROOM_AREA_BOOST
+      : SIZE_RANGES.bedroom.target;
+    const size = sizeOf(room.type, targetArea);
     const cx = bedroomCursorX + size.w / 2;
     const cy = livingRowBottomY + SEED_GAP + size.h / 2;
     placed.set(room.id, { id: room.id, type: room.type, cx, cy, w: size.w, h: size.h });
     bedroomCursorX += size.w + SEED_GAP;
-    // (room.typeIndex === 0 here is the "master" bedroom - buildAttachMap
-    // already knows this and points balconies/bathrooms at it directly via
-    // attachMap, so this file doesn't need to track it separately.)
   }
 
   // --- hallway: strip between living and the bedroom row, spanning the row's actual width ---

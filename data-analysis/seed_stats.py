@@ -9,6 +9,14 @@ CC BY-NC-SA 4.0 - see docs/PLAN.md for citation) for:
     in real layouts instead of arbitrary guesses)
   - room size ratio by type (each room's area as a fraction of its plan's
     total room area - grounds the rule engine's SIZE_RANGES)
+  - room aspect ratio by type (long-side:short-side, from each room's real
+    bounds - real rooms are never perfect squares; a first render pass
+    made every room square, which looked obviously synthetic next to real
+    floor plans, so this grounds room proportions in real geometry too)
+  - master-bedroom size boost (in plans with 2+ bedrooms, how much bigger
+    the largest bedroom typically is than the others - real plans always
+    give the primary bedroom more area, which a flat per-type size ratio
+    can't express on its own)
 
 Reads the pre-extracted JSON files the old project already produced
 (resplan_graphs.json, training_samples.json) rather than the raw pickle,
@@ -87,6 +95,63 @@ def size_ratio_by_type(samples):
     return summary
 
 
+def aspect_ratio_by_type(samples):
+    # Long-side:short-side ratio (always >= 1) rather than raw width/height,
+    # since rooms in the source data aren't canonically oriented - a room
+    # drawn "tall" in one plan and "wide" in another should still count as
+    # the same underlying proportion. The rule engine decides orientation
+    # (which side is which) itself; this only tells it HOW non-square a
+    # room of this type typically is.
+    ratios = defaultdict(list)
+    for sample in samples:
+        for room in sample["target"]["rooms"]:
+            x1, y1, x2, y2 = room["bounds"]
+            w, h = x2 - x1, y2 - y1
+            if w <= 0 or h <= 0:
+                continue
+            long_side, short_side = max(w, h), min(w, h)
+            ratios[room["type"]].append(long_side / short_side)
+
+    summary = {}
+    for room_type, values in ratios.items():
+        values.sort()
+        summary[room_type] = {
+            "count": len(values),
+            "p10": values[int(len(values) * 0.10)],
+            "median": statistics.median(values),
+            "p90": values[int(len(values) * 0.90)],
+        }
+    return summary
+
+
+def master_bedroom_boost(samples):
+    # For plans with 2+ bedrooms: ratio of the largest bedroom's area to
+    # the average of the OTHER bedrooms' area in that same plan. A value
+    # of 1.0 would mean "no difference" (every bedroom the same size,
+    # which is what the current rule engine actually does); real plans
+    # should show a real boost.
+    boosts = []
+    for sample in samples:
+        bedrooms = [r for r in sample["target"]["rooms"] if r["type"] == "bedroom"]
+        if len(bedrooms) < 2:
+            continue
+        areas = sorted((r["area"] for r in bedrooms), reverse=True)
+        largest = areas[0]
+        others_avg = sum(areas[1:]) / len(areas[1:])
+        if others_avg > 0:
+            boosts.append(largest / others_avg)
+
+    boosts.sort()
+    if not boosts:
+        return {}
+    return {
+        "count": len(boosts),
+        "p10": boosts[int(len(boosts) * 0.10)],
+        "median": statistics.median(boosts),
+        "p90": boosts[int(len(boosts) * 0.90)],
+    }
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset-dir", type=Path, default=DEFAULT_DATASET_DIR)
@@ -104,12 +169,20 @@ def main():
     print("Computing size ratios by room type...")
     size_ratios = size_ratio_by_type(samples)
 
+    print("Computing aspect ratios by room type...")
+    aspect_ratios = aspect_ratio_by_type(samples)
+
+    print("Computing master-bedroom size boost...")
+    bedroom_boost = master_bedroom_boost(samples)
+
     result = {
         "source": "ResPlan (Kaggle, CC BY-NC-SA 4.0), mined via data-analysis/seed_stats.py",
         "plan_count": len(graphs),
         "room_type_frequency": type_frequency,
         "adjacency_pair_frequency_top_30": adjacency[:30],
         "size_ratio_by_type": size_ratios,
+        "aspect_ratio_by_type": aspect_ratios,
+        "master_bedroom_area_boost": bedroom_boost,
     }
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)

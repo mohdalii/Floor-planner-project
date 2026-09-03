@@ -1748,6 +1748,226 @@ Reasoning, weighing time spent against what's left:
    surfaced to the user before or alongside that pass starting, not buried
    in this file for them to find later.
 
+**Fixer pass — rooms were geometrically correct but visually wrong (real
+aspect ratios + master bedroom sizing), plus two label-rendering bugs. Found
+by the orchestrator actually rasterizing `sample_output.svg` to a PNG and
+looking at it for the first time - every prior verification in this
+milestone was a geometric self-check (wall continuity, door-cut coverage),
+never an actual look at the picture.**
+
+Scope: exactly what the visual inspection surfaced, cross-checked against
+both the user's own reference floor-plan images and a web search on
+standard residential room proportions - not a re-litigation of anything
+already closed out above (DXF export and windows remain untouched, still
+next).
+
+**Problem 1 - every room rendered as a perfect square.** Root cause found
+immediately on reading `seeding.js`: its `sizeOf()` set `w = h =
+sqrt(targetArea)` for every room, unconditionally - the right AREA (from
+`SIZE_RANGES[type].target`), but a shape essentially no real room has. All 3
+bedrooms, both bathrooms, kitchen, living, storage all rendered as squares
+in the actual PNG - immediately, visibly wrong.
+
+**Problem 2 - no size variation between same-type rooms.** All 3 bedrooms
+were identically sized (same type -> same `SIZE_RANGES.bedroom.target` ->
+same square) - real houses always give the master bedroom more area than
+the others.
+
+**The real data behind the fix** (`data-analysis/seed_stats.py`, extended
+and re-run against the full 17,000-plan ResPlan dataset, written to
+`data-analysis/output/rule-constants.seed.json`'s two new fields):
+
+- `aspect_ratio_by_type` - median real long:short side ratio per room type:
+  `bedroom` 1.19, `kitchen` 1.29, `living` 1.28, `bathroom` 1.58, `storage`
+  1.34, `balcony` 2.34 (a narrow strip, as expected), `front_door` 5.36 (not
+  used - see below).
+- `master_bedroom_area_boost` - how much bigger a real plan's biggest
+  bedroom is than the average of its OTHER bedrooms: median 1.18 (p10 1.04,
+  p90 1.47).
+
+**What was built:**
+
+- `constants.js` - `ASPECT_RATIO_BY_TYPE` (loaded from
+  `seed.aspect_ratio_by_type[type].median`, same load-once-at-startup /
+  fail-loudly-if-missing pattern `SIZE_RANGES` already uses) and
+  `MASTER_BEDROOM_AREA_BOOST` (`seed.master_bedroom_area_boost.median`).
+- `seeding.js`'s `sizeOf()` rewritten to solve for a real rectangle instead
+  of a square. Algebra worked out and checked (not just asserted) in the
+  code's own comment: for target area `A` and long:short ratio `R`, solving
+  `L * S = A` and `L / S = R` simultaneously gives `S = sqrt(A / R)`, `L =
+  sqrt(A * R)` - verified by substituting back in: `L * S = sqrt(A*R) *
+  sqrt(A/R) = sqrt(A^2) = A` (correct) and `L / S = sqrt(A*R) / sqrt(A/R) =
+  sqrt(R^2) = R` (correct).
+- A new `LONG_AXIS_BY_TYPE` table decides which physical axis (`w` or `h`)
+  gets the long value per type - the dataset gives a ratio, not which axis
+  it maps to, so this is a documented judgement call, not something the data
+  could answer on its own. Full reasoning is in `seeding.js`'s own comment;
+  summarized: `bedroom`/`bathroom`/`kitchen`/`storage` -> long = `w`
+  (physically plausible shapes, e.g. a bath/counter run along one long
+  wall); `living` -> long = `h` (deliberately the one exception - living is
+  the TARGET every hall-bathroom/kitchen/storage fan-out measures its
+  available edge length against via `edgeLength(target, "right"|"left")`,
+  which returns `target.h`; keeping living's long side as `h` GROWS that
+  edge instead of shrinking it, protecting the previous redesign pass's
+  "genuine independent frontage, not a fabricated same-type chain"
+  mechanism rather than accidentally re-tightening it); `balcony` -> long =
+  `h` (a balcony's dominant real placement here, per `attachMap.js`, is off
+  the master bedroom's LEFT side, where `h` is the along-the-wall dimension
+  - matches "wide and shallow strip against an exterior wall"). `front_door`
+  is deliberately left OUT of this table (falls back to a plain square) -
+  checked how it's actually used first, per the task's own instruction:
+  it's a small marker box, not a real room - `wallNetwork.js` excludes it
+  from wall edges entirely, `svgRenderer.js` never labels it, and
+  `placeFrontDoor()` in `doors.js` picks its exterior wall using only its
+  centre point, never its `w`/`h` - giving it a real-room aspect ratio would
+  be a no-op dressed up as a fix.
+- Master bedroom boost: in `seeding.js`'s bedroom-placement block, only
+  `typeIndex === 0` (the master, by this project's existing declaration-
+  order convention - see `attachMap.js`'s own comment on why there's no
+  predicted size to rank by here) gets its target area multiplied by
+  `MASTER_BEDROOM_AREA_BOOST` (1.18) before `sizeOf()` runs; every other
+  bedroom keeps the plain `SIZE_RANGES.bedroom.target` area, unchanged. This
+  reproduces the real 1.18 ratio by construction (master / average-of-others
+  = `target * 1.18` / `target` = 1.18 exactly), not by trial and error.
+- **Verified nothing downstream silently assumed square** (this pass's
+  4th checklist item) by reading, not assuming: `solver.js` (`overlapArea`,
+  `gapBetween`, `isSideExterior`, `computeBoundingBox` all already index
+  `.w`/`.h` independently), `wallNetwork.js` (`roomsToMeters`,
+  `buildInteriorWalls` already use `x1/x2/y1/y2` derived from `w`/`h`
+  separately), `doors.js` (`sharedEdge` already checks both axes
+  independently), `validate.js` (same box-geometry helpers as `solver.js`,
+  already independent). The ONLY place a square was ever assumed was
+  `sizeOf()` itself - confirmed by grepping for `sqrt`/`side ===`/`square`
+  across `server/src` before writing anything, not just by inspection of the
+  files that seemed relevant.
+
+**Problem 3 - the STORAGE label was clipped/invisible at the room's left
+edge.** Root cause found empirically, not guessed: `svgRenderer.js`'s
+`fitFontSizePx` estimated each character's width as `0.58 * fontSizePx` for
+BOTH the bold room-name label and the plain dimension string underneath it.
+Measured the real number instead of continuing to guess - wrote a small
+script (`measure.html`, one-off, not committed) that renders every label
+word this file actually generates as real SVG `<text>` elements in a
+headless Chromium tab and reads back the true pixel width via `getBBox()`.
+Result: bold label text measures **0.611-0.746** per character (worst case
+"BEDROOM" at 0.746), and plain dimension text measures **0.509-0.524** - the
+old single guessed constant (0.58) was UNDER by ~25-30% for bold labels,
+which is exactly why "STORAGE" (a narrow 1.58m-wide room) computed a font
+size that looked like it fit with an 14% margin on paper but actually
+overflowed past the room's own left edge into the exterior wall in the real
+rendered image (where, since both the wall and the text are black, the
+overflowing letter was simply invisible rather than visibly "cut" - it
+LOOKED clipped because it was literally drawn on top of black wall fill of
+the same colour). Fixed with two constants calibrated from the real
+measurement, each set a little ABOVE the worst value actually observed (not
+exactly at it - deliberate headroom for cross-platform font-metric
+variation, matching how `wallNetwork.js`'s `WALL_SNAP` was already set above
+its own measured ceiling rather than exactly on it): `LABEL_CHAR_W_FACTOR =
+0.78`, `DIM_CHAR_W_FACTOR = 0.56`.
+
+**Problem 4 - the HALLWAY label was visually tangled with a door swing arc
+drawn across it.** Root cause: every bedroom's door swings INTO the hallway
+(`doors.js`'s `placeInteriorDoors` always swings a door into the attach-map
+TARGET, and every bedroom's target is the hallway), so in a narrow
+1.35m-deep hallway a door's swing arc routinely sweeps close to the room's
+own centre line, where the label is drawn. Z-order was already technically
+correct (room labels are the LAST thing added to `body` in
+`renderFloorPlanSvg`, after every wall and door symbol, so glyph ink already
+paints on top) - but an arc crossing through the WHITESPACE between/around
+letters is still fully visible there, which is what actually made "HALLWAY"
+read as tangled with the arc in the rendered PNG despite the z-order already
+being right. Fixed with a `drawTextWithHalo()` helper: an opaque white
+background rectangle, sized from the same (now-accurate)
+`LABEL_CHAR_W_FACTOR`/`DIM_CHAR_W_FACTOR` estimate used to pick the font
+size, drawn immediately before each label/dimension text line - a standard
+cartography/CAD technique for keeping a label legible over linework, not
+something invented ad hoc. Applied to every room's label and dimension text
+(not hallway-specific), since the same arc-through-narrow-room mechanism
+could in principle affect any small room with a door swinging into it.
+
+**Verification performed - actually looked at the rendered image, not just
+the geometry, per this task's explicit requirement:**
+
+- Regenerated `server/src/render/sample_output.svg` via
+  `node server/src/render/demo.js` (still passes both geometric self-checks:
+  9/9 wall-continuity, 9/9 doors placed + front door placed).
+- Rasterized it with headless Edge
+  (`msedge.exe --headless --disable-gpu --screenshot=... --window-size=1400,1100`)
+  and viewed the resulting PNG directly (plus two zoomed-in crops, made by
+  narrowing the SVG's own `viewBox` before re-rendering, to inspect the
+  STORAGE and HALLWAY regions at high magnification). Confirmed by eye:
+  - **Bedrooms are no longer identical squares.** MASTER BEDROOM renders as
+    4.42m x 3.71m (16.40 m^2); BEDROOM 2 and BEDROOM 3 both render as
+    4.06m x 3.42m (13.89 m^2 each) - a visibly bigger master, ratio 16.40 /
+    13.89 = 1.181, matching `MASTER_BEDROOM_AREA_BOOST` (1.18) almost
+    exactly.
+  - **Bathrooms/kitchen/living are genuinely rectangular, not square**, and
+    each one's rendered ratio matches its real-data target closely:
+    BATHROOM 2.38m x 1.51m (ratio 1.576, target 1.582), KITCHEN 3.21m x
+    2.49m (ratio 1.289, target 1.289 exactly), LIVING ROOM 5.01m x 6.42m
+    (ratio 1.281, target 1.281 exactly, and correctly deeper than wide per
+    the `LONG_AXIS_BY_TYPE` decision above), STORAGE 1.58m x 1.17m (ratio
+    1.350, target 1.345), BALCONY 1.28m x 3.00m (ratio 2.344, target 2.341 -
+    a visibly narrow strip, exactly as the real data said balconies should
+    be).
+  - **The STORAGE label is now fully inside its room**, with a clean white
+    margin between the last letter and the wall - confirmed in a zoomed
+    crop, not just at thumbnail scale where the old clipping was also easy
+    to miss by eye.
+  - **The HALLWAY label is fully legible**, no door-swing arc crossing
+    through any letter - confirmed in a zoomed crop; the arc that used to
+    cross the text is now visibly interrupted by the label's white halo
+    instead of drawn through it.
+- `npm test` (`server/`): **3/3 tests pass.** Sweep result: **672/672
+  (100.0%)** - up from the 632/672 (94.0%) baseline recorded at the top of
+  this reviewer close-out (the number to beat, per that close-out's own
+  final numbers). Every check, including the two that previously had
+  nonzero failure rates, is now at **0/672 (0.0%) failures**:
+  `livingNotOversized` (was 4/672, 0.6%) and `everyRoomReachableFromLiving`
+  (was 40/672, 6.0%). Both improvements are understood, not a mysterious
+  fluke:
+  - `livingNotOversized` improves because the master bedroom boost adds real
+    extra area to every plan's total built area without changing living's
+    own area, diluting living's fraction of the total slightly for every
+    program in the sweep.
+  - `everyRoomReachableFromLiving` (and `noSameTypeChaining`, already at 0%
+    and still at 0%) improves because living's long side is now `h` (per
+    `LONG_AXIS_BY_TYPE` above), which GROWS living's own right/left fan-out
+    edge length (`edgeLength(target, "right"|"left")` returns `target.h`) by
+    roughly `sqrt(1.28) ~ 13%` compared to the old square baseline - giving
+    the previous redesign pass's hall-bathroom fan-out mechanism genuinely
+    more real wall to spread across before ever needing its "genuinely
+    extreme residual" fallback, which is exactly the case this pass's
+    `LONG_AXIS_BY_TYPE` reasoning for `living` was chosen to protect rather
+    than accidentally regress.
+- `node server/src/ruleEngine/demo.js` (the rule-engine-only pipeline, no
+  rendering): re-ran fresh, still passes all 9 checks. Plot resolves to
+  18.09m x 12.33m (222.94 m^2) - up from the previously-recorded 16.12m x
+  11.59m. This is an expected consequence, not a bug: `solveLayout()`
+  measures the plot's width/depth from the ACTUAL solved layout's bounding
+  box (this project's own "dynamic plot sizing is a measured consequence of
+  the room program, not a fixed input" principle, stated in `docs/PLAN.md`)
+  - rooms with real proportions (a wider hall-bathroom stack, a bigger
+    master bedroom, a taller living room) genuinely occupy a different
+    footprint than a layout built entirely from squares did, so the
+    measured bounding box changing is the plot-sizing logic correctly doing
+    its job on a now-more-realistic input, not drifting on its own.
+
+**What this pass did NOT touch:** `solver.js`, `wallNetwork.js`, `doors.js`,
+`validate.js`, `attachMap.js`, `roomProgram.js`, `plotSizing.js` - all
+confirmed (not assumed) to already handle independent room `w`/`h` correctly
+before this pass started, and none were edited. DXF export
+(`server/src/dxf/` still empty) and windows (still no `window` reference
+anywhere in `server/src`) remain exactly as the previous reviewer close-out
+left them - untouched, still the two open items, still next.
+
+**Not claiming any milestone status change here** - this pass fixed real,
+visually-confirmed defects in work already recorded as done above; it
+doesn't move DXF export or windows forward, and doesn't reopen anything
+about the rendering/circulation milestone status already recorded. That
+determination remains the reviewer's to make, per this role's own scope
+boundary.
+
 ## Day 8-9 — Cost estimation
 Not started.
 

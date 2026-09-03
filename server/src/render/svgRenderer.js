@@ -219,6 +219,42 @@ function drawDoorSymbolsSvg(seg, project) {
 // Room labels + per-room dimension strings
 // ---------------------------------------------------------------------
 
+// ---------------------------------------------------------------------
+// Empirically-measured glyph-width factors (real bug fix, found by
+// actually looking at a rendered PNG, not by a geometric self-check).
+//
+// The room-labelling logic below used to assume every character averages
+// 0.58x the font size wide, for BOTH the bold room-name label ("STORAGE")
+// AND the plain dimension string ("1.58m x 1.17m") drawn under it. That
+// single guessed number was never checked against how a real browser
+// actually renders sans-serif text - and it was wrong specifically for
+// bold text, which is visibly WIDER per character than 0.58x. The result:
+// fitFontSizePx would compute a font size it believed left ~14% of margin
+// (fracW = 0.86) inside the room, when the real rendered text was often
+// wider than the room itself - e.g. the STORAGE label in the very first
+// rendered PNG this project produced, clipped/invisible against the
+// exterior wall because the letters actually extended past the room's own
+// left edge, straight into the wall's black fill.
+//
+// Measured directly (same "don't guess, check" standard this codebase
+// already uses for WALL_SNAP in wallNetwork.js): rendered every room-label
+// word this file actually generates (TYPE_LABELS' values, "MASTER BEDROOM",
+// "HALLWAY") plus two representative dimension strings, in a real headless
+// Chromium tab, and read back each string's true pixel width via SVG
+// `getBBox()` at font-size 16 (bold, matching drawRoomLabelsSvg's label
+// text) and 11 (normal weight, matching its dimension text). The measured
+// perCharFactor (bbox.width / (text.length * fontSizePx)) ranged from
+// 0.611 ("LIVING ROOM", the longest label) to 0.746 ("BEDROOM", the worst
+// case) for bold labels, and 0.509-0.524 for the plain dimension strings.
+// The two constants below are each set a little ABOVE the worst value this
+// project's own real label text actually measured at, not exactly AT it -
+// deliberate headroom for cross-platform font-metric variation (a
+// different OS/browser's default sans-serif could measure a few percent
+// wider), same reasoning WALL_SNAP's own margin above its measured ceiling
+// used.
+const LABEL_CHAR_W_FACTOR = 0.78; // bold label text - worst measured: BEDROOM at 0.746
+const DIM_CHAR_W_FACTOR = 0.56; // plain dimension text - worst measured: 0.524
+
 // Picks a font size (in pixels) that actually fits inside a box of the
 // given real-world size, or returns null if even the smallest legible size
 // wouldn't fit - the caller uses null to mean "skip this text entirely
@@ -231,14 +267,57 @@ function drawDoorSymbolsSvg(seg, project) {
 // legibility floor, which is what the milestone actually asked for
 // ("skipping the dimension text if the room is too small to hold it
 // legibly").
-function fitFontSizePx(text, boxWM, boxHM, pxPerMeter, { maxFs, minLegibleFs, heightFrac }) {
+function fitFontSizePx(text, boxWM, boxHM, pxPerMeter, { maxFs, minLegibleFs, heightFrac, charWFactor }) {
   if (!text) return null;
   const fracW = 0.86; // leave a little breathing room on either side of the text
-  const charWFactor = 0.58; // rough average glyph width, as a fraction of font size, for a sans-serif font
   const fitWidth = (boxWM * fracW * pxPerMeter) / Math.max(1, text.length) / charWFactor;
   const fitHeight = boxHM * heightFrac * pxPerMeter;
   const fs = Math.min(maxFs, fitWidth, fitHeight);
   return fs >= minLegibleFs ? fs : null;
+}
+
+// Estimated pixel width of `text` rendered at `fontSizePx`, using the same
+// per-character factor fitFontSizePx was just given for that same text -
+// used to size the opaque background "halo" behind a label (see
+// drawTextWithHalo below), not to decide the font size itself. Because
+// LABEL_CHAR_W_FACTOR/DIM_CHAR_W_FACTOR above are deliberately set ABOVE
+// the worst real width this project's own label text measured, reusing the
+// same factor here means the estimated width is also safely on the
+// generous side for every shorter/narrower real label - so the halo this
+// produces is never narrower than the real glyphs it needs to hide.
+function estimateTextWidthPx(text, fontSizePx, charWFactor) {
+  return text.length * charWFactor * fontSizePx;
+}
+
+// Draws an opaque background rectangle sized to comfortably contain `text`
+// at `fontSizePx`, THEN the text itself on top - a "label halo". This is
+// the fix for a real visual bug found by looking at a rendered PNG: the
+// HALLWAY label sits at the hallway's own centre point, but a narrow
+// hallway's bedroom doors all swing their door-symbol arcs INTO the
+// hallway (doors.js swings every door into its attach-map TARGET - see
+// placeInteriorDoors - and every bedroom's target here IS the hallway), so
+// an arc's curve routinely sweeps right through where the label is drawn.
+// Room labels were already the LAST thing drawn (see renderFloorPlanSvg -
+// they're added to `body` after every wall and door symbol), so in raw SVG
+// paint order the text glyphs already sit "on top" - but a glyph is only
+// opaque where its own ink is; an arc passing through the WHITESPACE
+// between/around letters is still fully visible there, which is what made
+// "HALLWAY" read as visually tangled with the arc in the actual rendered
+// image despite the z-order already being technically correct. A solid
+// background block behind the text (matching the page's own white
+// background - see renderFloorPlanSvg's background <rect>) fully occludes
+// anything beneath the ENTIRE label area, not just the glyph ink itself,
+// which is the standard fix cartography/CAD renderers use for label-over-
+// linework legibility.
+function drawTextWithHalo(centerXPx, centerYPx, text, fontSizePx, charWFactor, textAttrs) {
+  const textWidthPx = estimateTextWidthPx(text, fontSizePx, charWFactor);
+  const haloPadXPx = 3;
+  const haloPadYPx = 1.5;
+  const haloWPx = textWidthPx + haloPadXPx * 2;
+  const haloHPx = fontSizePx * 1.15 + haloPadYPx * 2; // 1.15x font size ~ one line's cap-height-to-descender span
+  let svg = `  <rect x="${(centerXPx - haloWPx / 2).toFixed(2)}" y="${(centerYPx - haloHPx / 2).toFixed(2)}" width="${haloWPx.toFixed(2)}" height="${haloHPx.toFixed(2)}" fill="white" />\n`;
+  svg += `  <text x="${centerXPx.toFixed(2)}" y="${centerYPx.toFixed(2)}" font-size="${fontSizePx.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif"${textAttrs}>${escapeXml(text)}</text>\n`;
+  return svg;
 }
 
 // Builds the display label for one room ("MASTER BEDROOM", "BATHROOM 2",
@@ -272,14 +351,24 @@ function drawRoomLabelsSvg(meterRooms, pxPerMeter, project) {
     const label = roomLabel(room, countByType);
     const dimText = `${room.w.toFixed(2)}m x ${room.h.toFixed(2)}m`;
 
-    const labelFs = fitFontSizePx(label, room.w, room.h, pxPerMeter, { maxFs: 16, minLegibleFs: 7, heightFrac: 0.32 });
+    const labelFs = fitFontSizePx(label, room.w, room.h, pxPerMeter, {
+      maxFs: 16,
+      minLegibleFs: 7,
+      heightFrac: 0.32,
+      charWFactor: LABEL_CHAR_W_FACTOR,
+    });
     // Dimension text is only worth attempting in a room that's big enough,
     // in absolute terms, to hold two lines of text at all - a tiny room
     // showing only its label (no dimension string) reads better than a
     // room crammed with two illegible lines.
     const dimFs =
       room.w > 0.9 && room.h > 0.9
-        ? fitFontSizePx(dimText, room.w, room.h, pxPerMeter, { maxFs: 11, minLegibleFs: 6, heightFrac: 0.18 })
+        ? fitFontSizePx(dimText, room.w, room.h, pxPerMeter, {
+            maxFs: 11,
+            minLegibleFs: 6,
+            heightFrac: 0.18,
+            charWFactor: DIM_CHAR_W_FACTOR,
+          })
         : null;
 
     const centerPx = project(room.cx, room.cy);
@@ -295,10 +384,10 @@ function drawRoomLabelsSvg(meterRooms, pxPerMeter, project) {
       const lineGapPx = 2;
       const labelY = centerPx.y - (dimHalfHeightPx + lineGapPx / 2);
       const dimY = centerPx.y + (labelHalfHeightPx + lineGapPx / 2);
-      svg += `  <text x="${centerPx.x.toFixed(2)}" y="${labelY.toFixed(2)}" font-size="${labelFs.toFixed(1)}" font-weight="bold" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="black">${escapeXml(label)}</text>\n`;
-      svg += `  <text x="${centerPx.x.toFixed(2)}" y="${dimY.toFixed(2)}" font-size="${dimFs.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="#333333">${escapeXml(dimText)}</text>\n`;
+      svg += drawTextWithHalo(centerPx.x, labelY, label, labelFs, LABEL_CHAR_W_FACTOR, ' font-weight="bold" fill="black"');
+      svg += drawTextWithHalo(centerPx.x, dimY, dimText, dimFs, DIM_CHAR_W_FACTOR, ' fill="#333333"');
     } else if (labelFs) {
-      svg += `  <text x="${centerPx.x.toFixed(2)}" y="${centerPx.y.toFixed(2)}" font-size="${labelFs.toFixed(1)}" font-weight="bold" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" fill="black">${escapeXml(label)}</text>\n`;
+      svg += drawTextWithHalo(centerPx.x, centerPx.y, label, labelFs, LABEL_CHAR_W_FACTOR, ' font-weight="bold" fill="black"');
     }
     // If even the label doesn't fit legibly, this room is small enough
     // (e.g. a tiny front_door-adjacent sliver, if one ever slipped through)

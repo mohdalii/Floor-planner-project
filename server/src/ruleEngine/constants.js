@@ -93,6 +93,71 @@ for (const type of ROOM_TYPES) {
 }
 
 // --------------------------------------------------------------------------
+// ASPECT_RATIO_BY_TYPE
+// --------------------------------------------------------------------------
+// For each room type, the typical LONG-side:SHORT-side ratio of real rooms
+// of that type, mined the same way SIZE_RANGES is - from
+// seed.aspect_ratio_by_type[type].median (the 50th percentile long:short
+// ratio across every real room of that type in the 17,000-plan ResPlan
+// dataset). seed_stats.py computes this per real room polygon as
+// max(bbox_w, bbox_h) / min(bbox_w, bbox_h), so a value of exactly 1.0 would
+// mean "perfectly square" and every value here is >= 1.0 by construction.
+//
+// This exists to fix a real, visible bug (found by actually looking at a
+// rendered floor plan, not just checking the geometry self-checks): before
+// this constant existed, seeding.js's sizeOf() gave every room a plain
+// SQUARE shape (side = sqrt(area)) - the right AREA, but a shape essentially
+// no real room actually has. Real bedrooms are close to square (median
+// ratio ~1.19) but real bathrooms/kitchens/living rooms are visibly
+// rectangular (~1.28-1.58), and balconies are narrow strips (~2.34). Only
+// the median is exported (not min/target/max the way SIZE_RANGES is) -
+// seeding.js only ever needs ONE ratio per room (there's no equivalent of
+// "min/max size" here, just "the typical proportion"), so a single
+// representative figure is all this needs to be.
+//
+// We use the median rather than the mean for the same reason SIZE_RANGES
+// uses percentiles instead of raw stats elsewhere in this file: it's not
+// pulled around by a handful of extreme/degenerate source polygons.
+export const ASPECT_RATIO_BY_TYPE = {};
+for (const type of ROOM_TYPES) {
+  const stats = seed.aspect_ratio_by_type?.[type];
+  if (!stats) {
+    // Same "fail loudly at startup" reasoning as the SIZE_RANGES loop above -
+    // a silently-missing ratio would otherwise only surface as a mysterious
+    // NaN deep inside seeding.js.
+    throw new Error(
+      `constants.js: rule-constants.seed.json has no aspect_ratio_by_type entry for "${type}"`
+    );
+  }
+  ASPECT_RATIO_BY_TYPE[type] = stats.median;
+}
+
+// --------------------------------------------------------------------------
+// MASTER_BEDROOM_AREA_BOOST
+// --------------------------------------------------------------------------
+// How much bigger a real plan's largest bedroom typically is than the
+// AVERAGE of that same plan's other bedrooms - seed.master_bedroom_area_boost
+// (a new field seed_stats.py mines by comparing, within each real multi-
+// bedroom plan, its biggest bedroom's area against the mean area of every
+// OTHER bedroom in that same plan). Median 1.18, i.e. a real master bedroom
+// is typically about 18% bigger than its plan's other bedrooms' average -
+// not dramatically bigger, but a real, consistent, measurable effect across
+// the dataset, not a rounding artifact (p10 1.04, p90 1.47 - see the seed
+// JSON directly).
+//
+// This exists to fix the second half of the same "every room looks
+// identical" visual bug ASPECT_RATIO_BY_TYPE fixes: before this constant
+// existed, every bedroom in a plan (master or not) got the exact same
+// SIZE_RANGES.bedroom.target area, so a 3-bedroom plan always rendered 3
+// IDENTICALLY-sized bedrooms - immediately readable as unrealistic in the
+// rendered image, and not what any real floor plan does. See seeding.js's
+// bedroom-placement block for where this actually gets applied (only to
+// bedroom_0, the "master" by this project's existing declaration-order
+// convention - see attachMap.js's own comment on why there's no predicted
+// size to rank by here).
+export const MASTER_BEDROOM_AREA_BOOST = seed.master_bedroom_area_boost.median;
+
+// --------------------------------------------------------------------------
 // HALLWAY_DEPTH_M
 // --------------------------------------------------------------------------
 // `hallway` is a new, always-present room type (see roomProgram.js) added
