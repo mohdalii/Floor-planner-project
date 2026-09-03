@@ -40,10 +40,12 @@ import { validateLayout } from "../validate.js";
 function runOne(requirements) {
   const rooms = buildRoomProgram(requirements);
   const attachMap = buildAttachMap(rooms);
-  // seedLayout() returns a RESOLVED attachMap (chained for any room a
-  // fan-out stack wrapped past its nominal target) alongside the seeded
-  // rooms - see seeding.js's claimPosition comment. Every later stage uses
-  // that resolved map, not the original buildAttachMap() output.
+  // seedLayout() returns a RESOLVED attachMap (re-pointed at a genuinely
+  // different, valid target for the rare room that needs it - e.g. storage
+  // falling back from kitchen to living, never a same-type sibling - see
+  // seeding.js's edge-based fan-out design comment) alongside the seeded
+  // rooms. Every later stage uses that resolved map, not the original
+  // buildAttachMap() output.
   const { rooms: seeded, attachMap: resolvedAttachMap } = seedLayout(rooms, attachMap);
   const solved = solveLayout(seeded, resolvedAttachMap);
   const validation = validateLayout(solved.rooms, resolvedAttachMap);
@@ -176,18 +178,20 @@ test("batch sweep: collision rate, boundary compliance, rule-satisfaction rate",
     "frontDoorNearLiving",
     "kitchenAdjacentToLiving",
     "ensuiteBathroomsAdjacent",
-    // Added in the Day 7-8 fixer pass, then GENERALIZED (still Day 7-8, a
-    // later pass) from a bedroom-only single-hop check into a real BFS
-    // reachability check over every room type - see validate.js check 8's
-    // own comment for the full story: the bedroom-only version held up
-    // fine on its own terms, but a reviewer found it had no way to catch a
-    // much bigger, separate defect (60.7% of this exact sweep produced at
-    // least one sealed bathroom/storage room with zero doors anywhere).
-    // This generalized check is what would have caught that, and now does
-    // - it belongs in the same zero-tolerance "unbuildable geometry" bucket
-    // as noOverlaps, not the softer statistical livingNotOversized
-    // judgement call below.
-    "everyRoomReachableFromLiving",
+    // Added this pass (Day 7-8, second redesign - replaces the previous
+    // fixer pass's chaining trade-off, not an addition to it): real ResPlan
+    // data (data-analysis/analyze_connectivity.py) showed a genuine door
+    // directly between two bathrooms happens in only 0.16% of real
+    // multi-bathroom plans, yet the previous fix made exactly that the
+    // ROUTINE outcome (60.7% same-type chaining rate on this exact grid -
+    // see STATUS.md's Day 7-8 entries). seeding.js was redesigned to spread
+    // same-target siblings across the real target's own edge(s) instead of
+    // chaining them together, and this check is the direct, cheap
+    // regression guard for that promise: under the redesign it is always
+    // zero (not just usually low - a same-type override is never written
+    // any more, not even in the rare residual case below), so it belongs in
+    // this zero-tolerance bucket, unlike everyRoomReachableFromLiving below.
+    "noSameTypeChaining",
   ]) {
     assert.equal(
       summary.failCounts[hardCheck],
@@ -196,19 +200,62 @@ test("batch sweep: collision rate, boundary compliance, rule-satisfaction rate",
     );
   }
 
+  // everyRoomReachableFromLiving: added in the Day 7-8 fixer pass as a
+  // zero-tolerance hard check (a bedroom-only reachability check
+  // generalized to every room type after a reviewer found 60.7% of this
+  // exact sweep produced at least one sealed room with literally zero
+  // doors). It stayed zero-tolerance through that pass because the fix
+  // (chaining a room to whichever same-type sibling it physically touched)
+  // made real reachability ALWAYS achievable, just sometimes indirect.
+  //
+  // This pass deliberately REMOVES that chaining (see the noSameTypeChaining
+  // check above, and seeding.js's big design comment, for why - it doesn't
+  // match how real houses connect a second bathroom). The honest
+  // consequence, measured directly on this exact grid: a small number of
+  // GENUINELY EXTREME room programs (more same-type siblings sharing one
+  // target than even a second edge of that target can hold - e.g. 1 bedroom
+  // with 5-6 bathrooms, or 5-6 bedrooms with 4-5 bathrooms, i.e. almost
+  // every bathroom in the house needing to be a shared hall bathroom off one
+  // living room) still can't reach living through a real door. This is
+  // exactly the kind of case this pass's own brief called out as an
+  // acceptable, honestly-labelled residual limitation - AS LONG AS it stays
+  // rare, not the previous ~60% hit-rate. It's asserted here with a real
+  // ceiling instead of forcing it back to zero (which would mean silently
+  // re-introducing same-type chaining to hide it, exactly the trade-off
+  // this pass exists to remove): 10% is a ceiling comfortably above the
+  // 5.95% (40/672) actually observed, so this still catches a real
+  // regression (e.g. the redesign's edge-based fan-out breaking and
+  // reverting toward the old ~60% rate) without being brittle to ordinary
+  // sweep-to-sweep noise. Confirmed confined to the same flavour of
+  // unrealistic combos already accepted for livingNotOversized below (1
+  // bedroom + 5-6 bathrooms, no kitchen and WITH kitchen; 2 bedrooms + 6
+  // bathrooms; 5-6 bedrooms + 4-5 bathrooms) - not ordinary requests like
+  // the project's own 3-bed/2-bath demo or a plain 4-bed/2-bath household,
+  // both of which have zero same-type chaining AND zero unreachable rooms
+  // under this redesign.
+  const reachabilityFailRate = summary.failCounts.everyRoomReachableFromLiving / summary.total;
+  assert.ok(
+    reachabilityFailRate <= 0.1,
+    `everyRoomReachableFromLiving failure rate ${(reachabilityFailRate * 100).toFixed(1)}% exceeded the 10% ceiling ` +
+      `(${summary.failCounts.everyRoomReachableFromLiving}/${summary.total}) - see printed requirements above`
+  );
+
   // Overall rule-satisfaction rate: livingNotOversized is a statistical
-  // judgement call (dataset p90 with headroom), not a hard physical
-  // constraint, so a handful of extreme/unrealistic combinations (see
-  // STATUS.md's documented open issue: 1 bedroom + 4-6 bathrooms, no
-  // kitchen) are an accepted, understood limitation rather than a bug.
-  // 95% is a floor comfortably below the 98.8% actually observed, so this
-  // assertion catches a real regression without being so tight it starts
-  // failing on ordinary sweep-to-sweep noise if SIZE_RANGES ever gets
-  // re-mined from an updated dataset.
+  // judgement call (dataset p90 with headroom), and everyRoomReachableFromLiving
+  // now legitimately fails on a small, documented set of genuinely extreme
+  // programs (see above) - neither is a hard physical constraint the way
+  // the checks in the loop above are, so a floor here (not 100%) is the
+  // right standard. 90% is comfortably below the 94.0% actually observed
+  // after this pass's redesign (632/672 - down slightly from the previous
+  // 668/672/99.4% specifically BECAUSE this pass stopped silently faking
+  // reachability via same-type chaining, not because anything regressed -
+  // see STATUS.md's Day 7-8 redesign entry for the full accounting), so
+  // this still catches a real regression without being brittle to ordinary
+  // sweep-to-sweep noise.
   const passRate = summary.overallPassed / summary.total;
   assert.ok(
-    passRate >= 0.95,
-    `overall pass rate ${(passRate * 100).toFixed(1)}% fell below the 95% floor`
+    passRate >= 0.9,
+    `overall pass rate ${(passRate * 100).toFixed(1)}% fell below the 90% floor`
   );
 });
 

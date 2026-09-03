@@ -425,6 +425,48 @@ export function validateLayout(solvedRooms, attachMap) {
     livingRoomIds.length > 0 &&
     roomsNeedingReachability.every((room) => reachableFromLiving.has(room.id));
 
+  // ---- 9. No same-type "through room" chaining ------------------------------
+  // A dedicated, cheap, direct check for exactly the trade-off this pass's
+  // redesign removes (see seeding.js's big design comment, and STATUS.md's
+  // Day 7-8 entry for the full real-data story): a previous fixer pass
+  // "solved" sealed shared-bathroom/storage rooms by silently rewriting a
+  // room's effective attach target to whichever SAME-TYPE sibling it
+  // physically landed beside (bathroom_1 -> bathroom_0, storage_1 ->
+  // storage_0) whenever it overflowed its real target's own wall. Real data
+  // (data-analysis/analyze_connectivity.py, run against the actual
+  // 17,000-plan ResPlan dataset) shows a genuine door directly between two
+  // bathrooms happens in only 66 of 40,261 real bathrooms across
+  // multi-bathroom plans (0.16%) - essentially never how real houses
+  // connect a second bathroom - so that trade-off has been replaced, not
+  // patched, by a redesign that spreads same-target siblings across the
+  // real target's own edge(s) instead.
+  //
+  // everyRoomReachableFromLiving (check 8, above) already indirectly proves
+  // this can't happen any more in the common case (its graph only trusts an
+  // edge that's BOTH an attachMap relationship AND a real shared wall, so a
+  // resolvedAttachMap entry that pointed at a same-type sibling would still
+  // count as "reachable" through that sibling - it would NOT, on its own,
+  // catch same-type chaining specifically, only total unreachability). This
+  // check is narrower and cheaper on purpose: it looks at resolvedAttachMap
+  // directly (no BFS, no geometry) and asks the one question the redesign's
+  // whole premise rests on - does any bathroom's or storage's resolved
+  // target turn out to be another room of the exact same type? Under the
+  // redesign, the answer should always be "no": seeding.js's fallback logic
+  // only ever re-points a room at a genuinely different, valid target
+  // (living, for storage's kitchen-doesn't-fit case) - it never writes a
+  // same-type override, even in the rare residual case (which instead
+  // leaves the ORIGINAL, unresolved target in place - see seeding.js's
+  // hall-bathroom-overflow and storage blocks). That makes this a hard,
+  // zero-tolerance regression guard for the specific bug class this pass
+  // fixes, not a softer judgement call - see batch.test.mjs, where it sits
+  // alongside noOverlaps and everyRoomReachableFromLiving.
+  const sameTypeChainViolations = Object.entries(attachMap).filter(([srcId, targetId]) => {
+    const src = byId.get(srcId);
+    const target = byId.get(targetId);
+    return Boolean(src) && Boolean(target) && src.type === target.type;
+  });
+  checks.noSameTypeChaining = sameTypeChainViolations.length === 0;
+
   // The layout passes overall only if every single check passed - one
   // failing check is enough to fail the whole plan, since each check
   // represents a genuine real-world usability problem on its own.

@@ -54,9 +54,10 @@ for (const [roomId, targetId] of Object.entries(attachMap)) {
 
 // Stage 3: rough first-guess placement (may overlap, may break rules - see
 // seeding.js's big comment for why that's expected and fine at this stage).
-// seedLayout() also returns a RESOLVED attachMap (chained for any room a
-// fan-out stack wrapped past its nominal target - see seeding.js's
-// claimPosition comment) - that resolved map, not the original one from
+// seedLayout() also returns a RESOLVED attachMap (re-pointed at a genuinely
+// different, valid target for the rare case that needs it - e.g. storage
+// falling back from kitchen to living - see seeding.js's edge-based
+// fan-out design comment) - that resolved map, not the original one from
 // buildAttachMap() above, is what every later stage should use.
 const { rooms: seeded, attachMap: resolvedAttachMap } = seedLayout(rooms, attachMap);
 
@@ -80,8 +81,8 @@ console.log(`  area:  ${solved.plot.areaM2.toFixed(2)} m^2`);
 console.log("\n=== Resolved attach map (post-seeding, used for solving/validation) ===");
 for (const [roomId, targetId] of Object.entries(resolvedAttachMap)) {
   const original = attachMap[roomId];
-  const chained = original !== targetId ? `  (chained - was -> ${original})` : "";
-  console.log(`  ${roomId} -> ${targetId}${chained}`);
+  const changed = original !== targetId ? `  (re-targeted - was -> ${original})` : "";
+  console.log(`  ${roomId} -> ${targetId}${changed}`);
 }
 
 // Stage 5: read-only usability checklist.

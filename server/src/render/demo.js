@@ -54,11 +54,12 @@ console.log(requirements);
 const rooms = buildRoomProgram(requirements);
 const attachMap = buildAttachMap(rooms);
 // seedLayout() returns a RESOLVED attachMap alongside the seeded rooms -
-// chained for any room a fan-out stack wrapped past its nominal target (see
-// seeding.js's claimPosition comment, and STATUS.md's Day 7-8 reviewer
-// close-out for why the plain attachMap above isn't safe to keep using past
-// this point). Everything downstream (solveLayout, buildWallNetwork's door
-// placement, validateLayout) uses this resolved version, not the original.
+// re-pointed at a genuinely different, valid target for the rare room that
+// needs it (see seeding.js's edge-based fan-out design comment, and
+// STATUS.md's Day 7-8 entries for why the plain attachMap above isn't safe
+// to keep using past this point). Everything downstream (solveLayout,
+// buildWallNetwork's door placement, validateLayout) uses this resolved
+// version, not the original.
 const { rooms: seeded, attachMap: resolvedAttachMap } = seedLayout(rooms, attachMap);
 const solved = solveLayout(seeded, resolvedAttachMap);
 

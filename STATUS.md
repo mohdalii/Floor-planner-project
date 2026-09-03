@@ -358,19 +358,23 @@ previously-reported number rather than just repeating it.
 
 ## Day 7-8 — CAD-style 2D rendering (SVG) + DXF export
 
-**Status: fixer pass complete (see "Fixer pass — sealed shared-bathroom/
-storage rooms fixed" at the bottom of this milestone for what changed and
-the real before/after numbers). NOT marked done here - that's the
-reviewer's call next, not this pass's. What IS now solid: the rule-engine
-circulation fix (bedroom reachability via the automatic hallway, verified
-again below with no regression) AND the sealed-shared-room defect the
-reviewer found (408/672, 60.7% of the sweep had at least one room with zero
-doors - now 0/672). What's still not started: DXF export
-(`server/src/dxf/` is still an empty directory - this pass didn't touch it,
-per its own scope) and windows (still nowhere in the codebase). See the
-original reviewer close-out below (kept for history) for the full diagnosis
-this pass fixed, and the new fixer-pass section at the end of this
-milestone for what was actually built.**
+**Status: CLOSED OUT for the rendering/circulation half; DXF export still
+explicitly open (see "Reviewer close-out (Day 7-8, THIRD and final pass -
+after the redesign that replaced same-type chaining)" near the end of this
+milestone for the final call, independent re-verification - including a
+quantified real-dataset extremity check for the residual 6.0% - and the
+next milestone). IMPORTANT for anyone reading this section top to bottom:
+the "Through-room decision" recorded partway down (in the second reviewer
+close-out) accepted same-type sibling chaining (bathroom_1 -> bathroom_0,
+etc.) as a documented MVP limitation. That decision was REPLACED, not
+supplemented, by a later fixer pass ("Fixer pass — same-type chaining
+replaced with real-data-grounded independent frontage"), after the user
+rejected it based on real ResPlan data showing a genuine door directly
+between two bathrooms happens in only 0.16% of real plans - and THAT
+redesign is what the final reviewer close-out at the end of this section
+verifies and closes out. Everything between here and that final section is
+kept as history (what was tried, what was learned) - it is NOT the current
+state of the code.**
 
 **Revised scope.** The first pass at this milestone (before this entry) was
 a quick throwaway preview: one flat-coloured `<rect>` per room, floating
@@ -1316,6 +1320,433 @@ worth saying plainly why, not silently overriding it:
    or done immediately after, whichever the next builder pass finds more
    natural once DXF's own structure exists. Not deprioritized indefinitely,
    just moved to directly after DXF instead of before it.
+
+**Fixer pass — same-type chaining replaced with real-data-grounded
+independent frontage.**
+
+**This REPLACES the "Through-room decision" recorded above (the second
+reviewer close-out's acceptance of bathroom_1 -> bathroom_0 style same-type
+chaining as a documented MVP limitation) - it is not an addition on top of
+it.** The user rejected that trade-off directly, backed by real data
+analysis, not a stylistic preference. Scope: exactly the redesign the user
+asked for - `attachMap.js` (verify + document), `seeding.js` (the real
+geometric fix), `validate.js` (a new regression guard), plus real
+measurement across the same 672-combo grid this file already uses
+throughout.
+
+**The real data (re-run this pass, 2026-09-01, against the actual
+17,000-plan ResPlan dataset via `data-analysis/analyze_connectivity.py` -
+numbers confirmed firsthand, not taken on the user's word):**
+
+- Plans with 2+ bathrooms: 16,848. Total bathrooms in those plans: 40,261.
+- **Bathroom-to-bedroom (en-suite, `via_door`): 23,348 instances - the
+  single most common bathroom relationship by a wide margin.**
+  `attachMap.js`'s existing en-suite-first pairing (bathrooms >= bedrooms ->
+  pair master-first, extras -> living) already matches this - verified
+  unchanged and correct this pass, not touched.
+- **Bathroom-to-bathroom, a REAL door (`via_door`): only 66 of 40,261 real
+  bathrooms across multi-bathroom plans - 0.16%.** Essentially never how
+  real houses connect a second bathroom. The previous fixer pass's chaining
+  fix made this the ROUTINE outcome instead (60.7% of this project's own
+  672-combo sweep, measured below) - the exact opposite of real plans.
+- **Bathroom-to-bathroom, touching but NOT via a door (mere adjacency):
+  13,453 instances.** Very common - back-to-back bathrooms for plumbing
+  efficiency are completely normal architecture, AS LONG AS each one still
+  has its own separate door elsewhere. This is precisely the distinction
+  the previous chaining fix blurred: it made a real wall between two
+  bathrooms stand in for one of them having no other door at all, and
+  called that "fixed".
+- **Living connects directly (`via_door`) to 2+ bathrooms simultaneously in
+  2,102 of 16,848 multi-bathroom plans (12.5%).** So there is no
+  fundamental geometric reason a shared target can't have several
+  independent doors at once - the previous fixer pass's claim that this
+  "isn't geometrically achievable once combined stack size exceeds the
+  target's own edge length" was a limitation of that specific column-wrap
+  algorithm (it only ever used HALF of a target's own edge length before
+  wrapping to a new column - see `seeding.js`'s `edgeLength` comment), not
+  a real architectural constraint.
+- Storage is a much sparser signal, confirmed directly: only 15 of 17,000
+  real plans have 2+ storage rooms at all. Storage-to-storage `via_door`:
+  2 instances. Used this to justify giving storage a simpler fallback
+  (one alternate target) than bathroom (a genuine second edge of the same
+  target) - see the design below.
+
+**What was built (`server/src/ruleEngine/seeding.js`, the real geometric
+fix - `attachMap.js` and `validate.js` got smaller, targeted additions):**
+
+- **`seeding.js`: the entire `claimedColumn`/`claimPosition`/`chainParentId`
+  mechanism from the previous fixer pass was removed and replaced**, not
+  patched. New mechanism (`edgeLength`/`peekEdgeSlot`/`commitEdgeSlot`):
+  - **The single biggest fix: a fan-out along a target's right/left edge
+    now uses the target's FULL height, not half of it.** The previous
+    bound only let occupants spread from the target's own centre-line
+    toward ONE corner, leaving the other half of that same real wall
+    completely unused. Doubling the usable wall length alone is enough for
+    2 median-sized real-data hall bathrooms to fit directly on living's
+    right edge with room to spare (0.42 units needed vs 0.598 available) -
+    which covers the large majority of realistic room programs, including
+    the project's own recurring 3-bed/2-bath demo (see below).
+  - **When a room's primary edge (e.g. living's right side, for hall
+    bathrooms) is genuinely full, it now tries a SECOND edge of the SAME
+    real target** (living's left side, after kitchen/storage) before
+    accepting anything else - still a real, direct touch to the real
+    target, never a fabricated relationship to a same-type sibling. This
+    is the literal "spread them along the target's actual available
+    edge(s)... only wrap to a second edge of the same target" mechanism
+    the redesign brief asked for.
+  - **Storage additionally gets one genuinely different fallback TARGET**
+    (living directly, if it doesn't fit beside a small kitchen) rather than
+    a second edge of the same target - a smaller, proportionate mechanism
+    justified directly by the data above (2+ storage is a 15-plan-out-of-
+    17,000 case, not worth the same two-edge machinery bathroom needed).
+  - **In the genuinely extreme residual case** (more same-type siblings
+    sharing one target than even a second edge can hold), the room still
+    gets a concrete, non-overlapping position for the solver to refine from
+    - but `resolvedAttachMap` is deliberately left UNCHANGED (not
+    overridden to whichever sibling it physically ends up beside). This is
+    the core design change: `doors.js`/`validate.js` now correctly and
+    honestly report no real door there, instead of a fabricated same-type
+    relationship being presented as "connected". One real bug surfaced and
+    fixed while building this: the first attempt extended the residual
+    placement along the PRIMARY (right) edge, which reliably drove it
+    toward increasing `cy` directly into the hallway/bedroom zone,
+    reproducing real overlaps the solver's safety net couldn't always
+    fully untangle (a genuine `noOverlaps` regression caught by this pass's
+    own testing, not shipped). Fixed by extending the FALLBACK (left) edge
+    instead - its `cx` is fixed by the target and room size alone,
+    independent of how far the residual placement grows in `cy`, so it can
+    never cross into the bedroom row/hallway's `x >= 0` territory no matter
+    how far it extends.
+  - A second real bug surfaced and fixed during implementation: the new
+    `peekEdgeSlot`'s "start flush against the near end of the full edge"
+    formula computes `-halfExtent + ownPerpExtent/2`, which is `-Infinity`
+    for every UNBOUNDED side (en-suite bathrooms, extra balconies/living
+    rooms all use "back"/"front", which stay unbounded - see `edgeLength`).
+    This produced `NaN`/`-Infinity` coordinates for every en-suite bathroom
+    in the first working version, breaking `frontDoorNearLiving`,
+    `kitchenAdjacentToLiving`, and `ensuiteBathroomsAdjacent` across roughly
+    half the sweep - caught immediately by `npm test`, not shipped. Fixed
+    by falling back to `perpOffset = 0` (the target's own centre - the same
+    starting point every unbounded side has always used) whenever the bound
+    is `Infinity`.
+- **`attachMap.js`: no functional change.** Verified this pass that
+  en-suite-first pairing (bathrooms >= bedrooms) already matches the real
+  data above and was never the source of the chaining bug - the bug was
+  always downstream, in `seeding.js`'s placement mechanism silently
+  rewriting a room's EFFECTIVE target while this file's own output stayed
+  correct throughout. Added comments documenting the real-data verification
+  and pointing at `seeding.js` for the actual fix, per the task's own
+  finding that this was "already reasonably close to correct".
+- **`validate.js`: new check 9, `noSameTypeChaining`.** A cheap, direct
+  regression guard for the redesign's core promise - iterates
+  `resolvedAttachMap` and fails if any entry points from one room to
+  another room of the EXACT SAME type. Kept alongside (not replacing)
+  `everyRoomReachableFromLiving` (check 8, unchanged) - see that check's own
+  updated comment for why a general BFS reachability check alone wouldn't,
+  on its own, prove same-type chaining is gone (it only proves SOME real
+  path exists, not what kind of room that path routes through).
+  `everyRoomReachableFromLiving` itself needed no code changes - it already
+  measures exactly the right thing (a real BFS over doors.js-equivalent
+  shared-wall + attach-map edges); what changed is what it's honestly
+  allowed to report now that chaining is gone (see verification below).
+
+**Verification performed (real numbers, re-measured by this pass, not
+carried over from the previous fixer/reviewer passes' figures):**
+
+- *Full-grid door sweep, rebuilt to run the ACTUAL wall-network/door-cutting
+  pipeline* (`buildWallNetwork`/`placeDoors`, not just `validate.js`'s
+  abstract attach-map check), across the identical 672-combination grid
+  `batch.test.mjs` uses (bedrooms 1-6 x bathrooms 0-6 x kitchens 0-1 x
+  balconies 0-3 x storages 0/2):
+  - **Same-type doors (a real placed door between two rooms of the exact
+    same type - bathroom<->bathroom or storage<->storage): 0/672 (0.0%)** -
+    down from the previous pass's measured 60.7% chaining rate. This is the
+    headline number: the trade-off the user rejected is gone, not reduced.
+  - **Sealed rooms (at least one non-front-door room with literally zero
+    placed doors): 40/672 (6.0%), 60 sealed room instances total** - NOT
+    literally 0, and worth being fully honest about the tension this
+    creates with this pass's own "Verification required" checklist, which
+    expected sealed rooms to "stay at 0, same as after the last fix". They
+    cannot BOTH be exactly 0 for the same underlying extreme combinations:
+    the previous fix's 0% sealed-room rate was achieved BY chaining (a
+    same-type door standing in for a room having no other real connection),
+    which is precisely the mechanism this pass removes. Once chaining is
+    gone, the genuinely-extreme combinations that used to be silently
+    "fixed" by it are now honestly reported as sealed instead. This is
+    exactly what item 3 of this pass's own brief explicitly authorized
+    ("that's fine to document as a rare, honestly-labeled residual
+    limitation... it should be RARE, not the ~60% hit-rate") - 6.0% is a
+    ~10x reduction from 60.7%, and, checked directly, confined to the same
+    flavour of unrealistic room programs already accepted elsewhere in this
+    file for `livingNotOversized` (1 bedroom + 5-6 bathrooms with or
+    without a kitchen; 2 bedrooms + 6 bathrooms; 5-6 bedrooms + 4-5
+    bathrooms - i.e. programs where almost every bathroom in the house has
+    to be a shared hall bathroom off one living room). None of the affected
+    combinations are ordinary requests like this project's own 3-bed/2-bath
+    demo or a plain 4-bed/2-bath household - both have zero sealed rooms
+    and zero same-type doors under this redesign (see below).
+- *`npm test` (`server/`):* **3/3 tests pass.** 672-combo sweep: **632/672
+  (94.0%) overall** (down from the previous pass's 668/672/99.4% -
+  understood and expected, not a regression: the drop is exactly the
+  `everyRoomReachableFromLiving` combinations above, now honestly failing
+  instead of passing via a fabricated chain). Per-check breakdown:
+  `noOverlaps`, `frontDoorOnExterior`, `frontDoorNearLiving`,
+  `kitchenAdjacentToLiving`, `balconiesOnExterior`, `ensuiteBathroomsAdjacent`,
+  and the new `noSameTypeChaining` are all **0/672 (0.0%) failures**.
+  `livingNotOversized` unchanged at 4/672 (0.6%, the pre-existing accepted
+  edge case). `everyRoomReachableFromLiving` is **40/672 (6.0%)** - matches
+  the door-sweep's sealed-room count exactly, a useful cross-check that the
+  abstract check and the concrete door-placement measurement agree.
+  `batch.test.mjs` was updated to match this honestly: `noSameTypeChaining`
+  joined the zero-tolerance hard-check bucket (it IS always zero under the
+  redesign); `everyRoomReachableFromLiving` was moved OUT of that bucket
+  into its own assertion with a 10% ceiling (comfortably above the observed
+  6.0%, tight enough to catch a real regression back toward 60%) - forcing
+  it back to a zero-tolerance assertion would have meant either silently
+  re-introducing chaining to hide the residual (exactly what this pass
+  removes) or fabricating a fake pass; neither is honest. The overall
+  pass-rate floor was correspondingly lowered from 95% to 90% (comfortably
+  below the observed 94.0%), with the reasoning for the drop documented
+  directly in the test file, not left unexplained.
+- *Bedroom reachability, re-confirmed with zero regression* (this pass's
+  own explicit requirement - the redesign was scoped to never touch
+  hallway/bedroom placement logic, and didn't): re-ran the same 5 scenarios
+  the Day 7-8 fixer/reviewer passes used (3bed/2bath hall-bathrooms,
+  2bed/3bath full en-suite, 1bed/1bath/1balcony, 4bed/0bath,
+  5bed/5bath/2balcony) through the FULL pipeline including actual door
+  placement. **5/5 still pass, every bedroom in every scenario has a real
+  door** - identical to every previous pass's result.
+- *`node server/src/render/demo.js` (the project's own recurring 3bed/2bath
+  demo scenario) - re-ran fresh, the task's explicit ask:* resolved attach
+  map now shows `bathroom_1 -> living_0` with **no re-targeting at all**
+  (better than the minimum bar of "a door to something other than
+  bathroom_0" - it's a direct, independent door to living itself, exactly
+  matching the real data's most common "living doors to 2+ bathrooms
+  simultaneously" pattern). Self-check 1 (wall continuity): **9/9
+  relationships PASS**, including a full-span wall for `bathroom_1 <->
+  living_0` on its own dedicated stretch of living's right wall (span
+  [2.55, 4.45], distinct from `bathroom_0 <-> living_0`'s span [0.46,
+  2.36]). Self-check 2 (door-cut coverage): **9/9 interior doors placed, 0
+  skipped**, front door placed - `bathroom_1 -> living_0` cut as a genuine,
+  independent door, not a chain through `bathroom_0`.
+- *2 bed / 4 bath, the task's explicit "clearly more bathrooms than
+  bedrooms" test case:* `bathroom_0 -> bedroom_0` and `bathroom_1 ->
+  bedroom_1` (en-suite pairing, unaffected), `bathroom_2 -> living_0` and
+  `bathroom_3 -> living_0` (the two hall bathrooms) - resolved attach map
+  IDENTICAL to the nominal one (no re-targeting needed at all, both fit
+  directly on living's own right edge). All 4 interior bathroom-related
+  doors placed as genuine, independent doors to their real targets, 0
+  skipped. Full `validateLayout` passes every check including
+  `noSameTypeChaining` and `everyRoomReachableFromLiving`.
+
+**What this pass did NOT touch, on purpose:** `solver.js` (the redesign
+only needed a better SEED position, not a different refinement algorithm -
+confirmed by `git status`/diff, genuinely untouched), DXF export
+(`server/src/dxf/` is still an empty directory), and windows (still nowhere
+in `server/src`) - all explicitly out of scope for this pass, which was
+scoped to exactly the user's rejected-trade-off redesign.
+
+**Not claiming this milestone "done"** - that determination belongs to
+whoever reviews this pass next, per this role's own scope boundary. What
+can be said plainly, with real numbers behind it: the same-type chaining
+trade-off the user rejected is gone (0.0% across the full sweep, down from
+60.7%), replaced by genuine independent frontage for the large majority of
+programs and an honestly-labelled, ~10x-rarer residual limitation (6.0%,
+confined to genuinely extreme, unrealistic room programs) for the rest -
+not silently patched over. `npm test`'s hard-check bucket and pass-rate
+floor were updated to match reality rather than tuned to keep a stale
+number green.
+
+**Reviewer close-out (Day 7-8, THIRD and final pass - after the redesign
+that replaced same-type chaining).**
+
+*Independent verification performed - three fresh scripts of my own,
+reusing no prior agent's script, per this role's own "actually read and run
+the code" standard:*
+
+1. **Re-ran `node server/src/ruleEngine/demo.js`, `node server/src/render/demo.js`,
+   and `npm test` (`server/`) fresh.** All three match the fixer's report
+   exactly: plot 16.12m x 11.59m; `bathroom_1 -> living_0` resolves with NO
+   re-targeting (a genuine independent door, not a chain through
+   `bathroom_0`); render self-checks 9/9 wall-continuity PASS and 9/9
+   interior doors placed, 0 skipped; `npm test` 3/3 tests pass, sweep
+   632/672 (94.0%), `noOverlaps`/`frontDoorOnExterior`/`frontDoorNearLiving`/
+   `kitchenAdjacentToLiving`/`balconiesOnExterior`/`ensuiteBathroomsAdjacent`/
+   `noSameTypeChaining` all 0/672 (0.0%), `livingNotOversized` 4/672 (0.6%,
+   unchanged pre-existing edge case), `everyRoomReachableFromLiving` 40/672
+   (6.0%).
+2. **Job #2 (same-type chaining elimination) - built a fresh script that
+   runs the ACTUAL wall-network/door-placement pipeline** (`buildWallNetwork`
+   + `placeDoors`, not `validate.js`'s abstract `noSameTypeChaining` check)
+   across the identical 672-combo grid, and inspects every REAL PLACED DOOR's
+   two room types directly. Result: **0/672 combinations produce a placed
+   door between two rooms of the same type (bathroom<->bathroom or
+   storage<->storage) - 0 same-type door instances found anywhere in the
+   grid.** This confirms the elimination at the level `validate.js`'s own
+   check can't fully rule out on its own (a resolvedAttachMap free of
+   same-type entries doesn't, by itself, prove no same-type door ever gets
+   physically cut) - independently verified from real geometry, not just
+   from the attach-map data structure.
+3. **Job #1 (how extreme is "extreme") - quantified against the real
+   17,000-plan ResPlan dataset, not eyeballed.** Built a fresh script
+   (`analyze_connectivity.py`'s sibling, a new one-off, not committed - see
+   below) that computes, for every real plan, its bedroom/bathroom/kitchen/
+   storage counts, and a second script that runs the full 672-combo sweep
+   through real door placement and records each of the 40 sealed-room
+   combinations' exact requirement tuple. Cross-referencing the two:
+   - **Real-dataset ceiling:** across all 17,000 real plans, the bathroom-
+     to-bedroom ratio never exceeds 4.0 (p100/max), and 99.9% of plans stay
+     at or below 3.0. Max bedroom count ever seen in a real plan is 7 (one
+     plan); max bathroom count is 7. No real plan has bathrooms >= bedrooms
+     + 3 except 4 plans (0.024%), and precisely 0 real plans have bathrooms
+     >= 5 with bedrooms <= 2.
+   - **Every one of the 40 failing combinations was checked against the
+     real dataset for an EXACT joint match** (same bedroom count, bathroom
+     count, kitchen count, and storage count together - not just "is the
+     ratio high"):
+     - **24/40 (60%)** - bedroom/bathroom pairs (1bed+5bath, 1bed+6bath,
+       2bed+6bath, 6bed+4bath) that occur **zero times** anywhere in the
+       17,000-plan dataset, regardless of kitchen/storage count.
+     - **4/40 (10%)** - 5bed+4bath with 0 kitchens and 2 storage rooms. The
+       bedroom/bathroom pair alone isn't rare (69/17,000 real plans, 0.41%),
+       but checked directly: of those 69 real plans, **0 have zero kitchens
+       and 0 have 2+ storage rooms** - the exact joint combination this
+       pass's failing case needs occurs **zero times** in real data.
+     - **8/40 (20%)** - 6bed+5bath with 2 storage rooms. 6bed+5bath alone
+       occurs 6/17,000 times (0.035%) in reality, but of the 15 real plans
+       with 2+ storage rooms anywhere in the whole dataset, **none** have 6
+       bedrooms - so this joint combination is also **zero occurrences**.
+     - **4/40 (10%)** - 6bed+5bath with 1 kitchen and 0 storage rooms (the
+       only sub-case with a real-world match): this exact joint profile
+       (ignoring balcony count, which the dataset schema doesn't let this
+       check hold fixed) genuinely occurs in the real data, **6 times out of
+       17,000 (0.035%)**.
+   - **Net result: 36 of the 40 failing combinations (90%) correspond to a
+     joint room-count profile that appears literally zero times anywhere in
+     17,000 real floor plans; the remaining 4 (10%) correspond to a genuinely
+     rare but real pattern (0.035% of real plans).** None resemble anything
+     close to an ordinary request - this is a quantitative confirmation, not
+     just a description of the list looking unusual by eye, and it holds up
+     under the stricter "does this EXACT combination ever occur" test, not
+     just a looser "is the ratio high" one.
+   - Both scripts were one-off and are not committed (matching this
+     project's existing convention of not littering the repo with ad-hoc
+     verification scripts - `batch.test.mjs` is the one sweep that's
+     committed, and it doesn't need dataset access to run).
+
+*Milestone-intent check (not just re-confirming the fixer's own findings):*
+read `attachMap.js`, `seeding.js`, and `validate.js` in full end to end
+(not just the diff), and independently reasoned through the edge-based
+fan-out mechanism (`edgeLength`/`peekEdgeSlot`/`commitEdgeSlot`) rather than
+trusting the code comments' own description of it - the "full edge length,
+not half" fix and the "second edge before ever chaining" fallback both check
+out against the actual code, not just the accompanying prose. `docs/PLAN.md`'s
+Day 7-8 line ("doors cut into shared walls with swing-arc symbols... matching
+standard architectural drafting convention") is genuinely satisfied by what's
+in `server/src/render/`: connected wall network, real door cuts (independent
+frontage for the large majority of programs, not fabricated relationships),
+swing arcs, labels, dimension lines - and now, additionally, grounded against
+real household data rather than an internal geometric argument alone. This is
+a stronger evidence base than either of the previous two Day 7-8 reviewer
+passes had.
+
+**Final Day 7-8 status, updated and closed out:**
+
+- **Done and solid — rule-engine circulation + door reachability.** The
+  automatic hallway (bedroom reachability) and the edge-based fan-out
+  redesign (independent frontage instead of same-type chaining) together
+  mean every room in every realistic room program has a real door to the
+  rest of the house, verified three independent ways in this pass alone
+  (attach-map-level check, real door-placement-level check, and cross-
+  referenced against real ResPlan household data). The one residual gap
+  (6.0% of a deliberately extreme 672-combo synthetic sweep, not 6.0% of
+  realistic requests) is honestly labelled, not hidden, and shown here to be
+  concentrated in room-count combinations that essentially never occur in
+  17,000 real floor plans.
+- **Done and solid — CAD-style SVG rendering.** Connected wall network,
+  door cuts with swing-arc symbols, room labels, dimension lines, no colour
+  fill - matches the user's reference images structurally, and (this pass's
+  own contribution) is now verified against real household data twice over
+  (the original architectural-realism complaint, and this pass's quantified
+  extremity check), not just against this project's own synthetic sweep.
+- **Not started — DXF export.** `server/src/dxf/` remains an empty
+  directory (confirmed via `ls`). This is the one piece of `docs/PLAN.md`'s
+  literal Day 7-8 scope line ("DXF export (hand-written)") not yet built.
+  Explicitly deferred three reviewer passes running now, each time for a
+  documented, real reason (first: renderer had an unfixed door-placement
+  bug; second and third: same reasoning, since the bug kept turning out to
+  be deeper than first diagnosed) - not overlooked.
+- **Not started — windows.** Confirmed via `grep -ril "window" server/src`
+  - zero matches. Still queued, per what the user was told mid-milestone.
+- **Overall: Day 7-8 as a WHOLE (DXF export + 2D preview, `docs/PLAN.md`'s
+  original framing) is still not fully done - DXF export is the literal gap.
+  But the *revised, harder* scope this milestone actually grew into (CAD-
+  style rendering with fully correct, dataset-verified circulation) is
+  genuinely finished and does not need another pass.** Three reviewer
+  close-outs, two fixer passes beyond the original builder/checker cycle,
+  and real user pushback each caught a real defect (bedroom sealing, then
+  bathroom/storage sealing, then an architecturally-unrealistic trade-off)
+  - each fix was substantive, not cosmetic, and this pass's independent
+  re-verification (including, for the first time, quantifying the residual
+  limitation against real household data rather than just this project's own
+  synthetic sweep) found no further defect to flag. There is no remaining
+  reason to keep this milestone open for the rendering/circulation half.
+
+**Next milestone - DXF export, with an explicit calendar-risk flag for the
+user, not a silent continuation.**
+
+Reasoning, weighing time spent against what's left:
+
+1. **DXF export is the correct, literal next step.** It's `docs/PLAN.md`'s
+   own remaining Day 7-8 scope item, required by the underlying report's
+   Scope section (3.2) for AutoCAD compatibility, and it can now safely reuse
+   `wallNetwork.js`'s real-metre room/wall geometry - which is independently
+   confirmed correct and stable by this pass, on both this project's own
+   sweep AND real dataset comparison, so there's no remaining reason to
+   expect it needs yet another rendering-layer fix underneath it. Keep it
+   small and literal per `docs/PLAN.md`'s own framing (hand-written
+   LWPOLYLINE + TEXT per room, no new dependency) - this milestone does not
+   need the same multi-pass depth Day 7-8 needed, because the geometry it
+   exports is already solved.
+2. **Windows should be explicitly named as at-risk scope, not quietly
+   folded in or quietly dropped.** It was promised to the user in
+   conversation, but it is not literal report-required scope the way DXF
+   is (`docs/PLAN.md`'s Scope section never mentions windows). Pair it with
+   DXF if it fits naturally (both consume the same wall geometry); if the
+   calendar below doesn't allow it, it should be disclosed to the user as
+   descoped rather than silently dropped, not attempted at the cost of a
+   report-required deliverable.
+3. **The calendar case for urgency, stated plainly with real numbers, not
+   just "this took a while":** `docs/PLAN.md` was written when today was
+   2026-08-27 (Day 1), with a stated deadline of ~2026-09-11 (15 days out).
+   Today is 2026-09-03 - Day 7-8 closes out on almost exactly its
+   day-budgeted slot on the calendar (calendar day 8 of 15), which is a
+   genuinely good sign given how much real rework it needed. But that means
+   there are only **8 calendar days left** (2026-09-04 through 2026-09-11)
+   for **Day 8-9 through Day 15 of `docs/PLAN.md`'s roadmap - cost
+   estimation, API + MongoDB wiring, the full React frontend (requirements
+   form, 2D viewer, Three.js 3D viewer, cost panel, DXF download), an
+   integration pass, the report rewrite, and buffer/polish - which is
+   nominally 10 more budgeted days of work**, plus DXF export and windows
+   still owed from this milestone's own carve-out. The math does not
+   currently close: 10+ nominal days of remaining roadmap against 8 real
+   days left, even before DXF/windows are added back in. This is worth
+   surfacing to the user directly now, not after another milestone slips -
+   the two realistic options are (a) trim scope deliberately (a strong
+   candidate: treat the Three.js 3D viewer as a stretch goal behind the 2D
+   viewer + DXF export, since those two together already deliver the
+   report's core "view and edit your floor plan" promise, and/or keep cost
+   estimation to a simple, explicitly-documented formula rather than
+   anything iterative), or (b) accept that the report/defense-prep buffer
+   (Day 15) shrinks or disappears. Recommending (a) - deliberate, disclosed
+   trimming beats an undisclosed rushed finish - but this is the user's call
+   to make, not mine to make silently by just moving faster.
+4. Given the above, the immediate next builder pass should be scoped
+   tightly: DXF export only, hand-written and minimal, reusing existing
+   geometry, with windows attempted only if it fits inside the same pass
+   without threatening that scope - and the calendar flag above should be
+   surfaced to the user before or alongside that pass starting, not buried
+   in this file for them to find later.
 
 ## Day 8-9 — Cost estimation
 Not started.
